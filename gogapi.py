@@ -8,9 +8,11 @@ import webbrowser
 from datetime import datetime, timezone, timedelta
 import os.path
 
+PARSE_JSON = True
+
 CLIENT_ID = "46899977096215655"
 CLIENT_SECRET = "9d85c43b1482497dbbce61f6e4aa173a433796eeae2ca8c5f6129f2dc4de46d9"
-CLIENT_VERSION = "1.1.22.11" # Just for their statistics
+CLIENT_VERSION = "1.1.24.16" # Just for their statistics
 
 PAGE_SUCCESS = """\
 <!doctype html>
@@ -40,7 +42,7 @@ PAGE_ERROR = """\
   <body>
     <h1>Login failed</h1>
     <p>
-      Something went wrong and the login code is missing from the url. 
+      Something went wrong and the login code is missing from the url.
     </p>
   </body>
 </html>
@@ -61,9 +63,7 @@ web_config = {
     "user.review_votes": "/user/review_votes.json",
     "user.change_currency": "/user/changeCurrency/{}",
     "user.change_language": "/user/changeLanguage/{}",
-    "user.tw3_change_language": "/thewitcher3/changeLanguage/{}",
     "user.set_redirect_url": "/user/set-redirect-url",
-    "user.avatar_nick": "/user/data/username_and_avatar",
     "user.review_guidelines": "/user/reviewTipsStatus.json",
     "user.public.info": "/users/info/{}",
     "user.public.block": "/users/{}/block",
@@ -78,13 +78,13 @@ web_config = {
     "cart.add": "/cart/add/{}",
     "cart.add_series": "/cart/add/series/{}",
     "cart.remove": "/cart/remove/{}",
-    
+
     "reviews.search": "/reviews/product/{}.json",
     "reviews.vote": "/reviews/vote/review/{}.json",
     "reviews.report": "/reviews/report/review/{}.json",
     "reviews.rate": "/reviews/rate/product/{}.json",
     "reviews.add": "/reviews/add/product/{}.json",
-    
+
     "order.change_currency": "/checkout/order/{}/changeCurrency/{}",
     "order.add": "/checkout/order/{}/add/{}",
     "order.remove": "/checkout/order/{}/remove/{}",
@@ -95,13 +95,13 @@ web_config = {
     "order.process_order": "/payment/process/{}",
     "order.payment_status": "/payment/ping/{}",
     "order.check_status": "/order/checkStatus/{}",
-    
+
     "checkout": "/checkout",
     "checkout_id": "/checkout/{}",
     "checkout_manual": "/checkout/manual/{}",
-    
+
     # Manual
-    
+
     "account.games": "/account",
     "account.movies": "/account/movies",
     "account.wishlist": "/account/wishlist",
@@ -109,11 +109,11 @@ web_config = {
     "account.chat": "/account/chat",
     "account.gamedetails": "/account/gameDetails/{}.json",
     "account.get_filtered": "/account/getFilteredProducts",
-    
+
     "wallet": "/wallet",
-    
+
     "settings.orders": "/orders"
-}    
+}
 
 galaxy_config = {
     "file": "api:/products/{}/{}",
@@ -121,9 +121,10 @@ galaxy_config = {
     "friends": "chat:/users/{}/friends",
     "invitations": "chat:/users/{}/invitations",
     "status": "presence:/users/{}/status",
+    "statuses": "presence:/statuses",
     "achievements": "gameplay:/clients/{}/users/{}/achievements",
     "sessions": "gameplay:/clients/{}/users/{}/sessions",
-    "friends.achievements": 
+    "friends.achievements":
         "gameplay:/clients/{}/users/{}/friends_achievements_unlock_progresses",
     "friends.sessions": "gameplay:/clients/{}/users/{}/friends_sessions",
     "product": "api:/products/{}",
@@ -149,8 +150,9 @@ gog_servers = {
 }
 
 PRODUCT_EXPANDABLE = [
-    "downloads", "expanded_dlcs", "description", "screenshots", "videos", 
+    "downloads", "expanded_dlcs", "description", "screenshots", "videos",
     "related_products", "changelog"]
+USER_EXPANDABLE = ["friendStatus", "wishlistStatus", "blockedStatus"]
 
 def web_url(url_id, *args, **kwargs):
     host_url = gog_servers["embed"]
@@ -171,28 +173,42 @@ def galaxy_client_config():
     resp = requests.get(galaxy_url("client-config"))
     return resp.json()
 
+class ApiError(Exception):
+    def __init__(self, error, description):
+        self.error = error
+        self.description = description
+
 class GogApi:
     def __init__(self, token):
         self.token = token
 
     # Helpers
 
-    def get(self, url, *args, **kwargs):
-        if token.expired():
-            token.refresh()
+    def request(self, *args, **kwargs):
+        if self.token.expired():
+            self.token.refresh()
         headers = {"Authorization": "Bearer " + token.access_token}
-        resp = requests.get(url, headers=headers, *args, **kwargs)
-        return resp
-    
-    def get_json(self, url, *args, **kwargs):
-        resp = self.get(url, *args, **kwargs)
-        try:
+        headers.update(kwargs.pop("headers", {}))
+        return requests.request(*args, headers=headers, **kwargs)
+
+    def get(self, *args, **kwargs):
+        return self.request(self, "GET", *args, **kwargs)
+
+    def post(self, *args, **kwargs):
+        return self.request(self, "POST", *args, **kwargs)
+
+    def request_json(self, *args, **kwargs):
+        resp = self.request(*args, **kwargs)
+        if PARSE_JSON:
             return json.loads(resp.text)
-        except (ValueError, TypeError) as e:
-            print(resp.text)
-            raise
+        else:
+            return resp.text
+
+    def get_json(self, *args, **kwargs):
+        return self.request_json("GET", *args, **kwargs)
 
     def get_gogdata(self, url, *args, **kwargs):
+        # TODO: Limit to <script> tags to prevent injection from user content
         resp = self.get(url, *args, **kwargs)
         matches = GOGDATA_RE.finditer(resp.text)
         gogdata = {}
@@ -220,10 +236,10 @@ class GogApi:
 
     def web_friends_gogdata(self):
         return self.get_gogdata(web_url("account.friends"))
-    
+
     def web_chat_gogdata(self):
         return self.get_gogdata(web_url("account.chat"))
-    
+
     def web_wallet_gogdata(self):
         return self.get_gogdata(web_url("wallet"))
 
@@ -232,7 +248,7 @@ class GogApi:
 
     def web_account_gamedetails(self, game_id):
         return self.get_json(web_url("account.gamedetails", game_id))
-    
+
     def web_account_search(self):
         """
         Allowed query keys:
@@ -249,7 +265,7 @@ class GogApi:
         totalPages: Total Pages
         """
         return self.get_json(web_url("account.get_filtered"), params=query)
-    
+
     def web_search(self, query):
         """
         Allowed query keys:
@@ -271,10 +287,10 @@ class GogApi:
 
     def web_user_data(self):
         return self.get_json(web_url("user.data"))
-    
+
     def web_user_games(self):
         return self.get_json(web_url("user.games"))
-    
+
     def web_user_wishlist(self):
         return self.get_json(web_url("user.wishlist"))
 
@@ -291,55 +307,59 @@ class GogApi:
 
     def web_user_review_votes(self):
         return self.get_json(web_url("user.review_votes"))
-    
+
     def web_user_change_currency(self, currency):
         return self.get_json(web_url("user.change_currency", currency))
 
     def web_user_change_language(self, lang):
         return self.get_json(web_url("user.change_language", lang))
 
-    def web_user_tw3_change_language(self, lang):
-        return self.get_json(web_url("user.tw3_change_language", lang))
-    
     def web_user_set_redirect_url(self, url):
         """Set redirect url after login. Only know valid url: checkout"""
         return self.get(web_url("user.set_redirect_url", params={"url": url}))
-    
+
     def web_user_review_guidelines(self):
         return self.get_json(web_url("user.review_guidelines"))
-    
-    def web_user_public_info(self, user_id):
-        return self.get_json(web_url("user.public.info", user_id))
-    
+
+    def web_user_public_info(self, user_id, expand=None):
+        if not expand:
+            params = None
+        elif expand == True:
+            params = {"expand": ",".join(USER_EXPANDABLE)}
+        else:
+            params = {"expand": ",".join(expand)}
+        return self.get_json(
+            web_url("user.public.info", user_id, params=params))
+
     def web_user_public_block(self, user_id):
         return self.get_json(web_url("user.public.block", user_id))
-    
+
     def web_user_public_unblock(self, user_id):
         return self.get_json(web_url("user.public.unblock", user_id))
 
 
     def web_friends_remove(self, user_id):
         return self.get_json(web_url("friends.remove", user_id))
-    
+
     def web_friends_invite(self, user_id):
         return self.get_json(web_url("friends.invite", user_id))
-    
+
     def web_friends_accept(self, user_id):
         return self.get_json(web_url("friends.accept", user_id))
-    
+
     def web_friends_decline(self, user_id):
         return self.get_json(web_url("friends.decline", user_id))
 
 
     def web_cart_get(self):
         return self.get_json(web_url("cart.get"))
-    
+
     def web_cart_add(self, game_id):
         return self.get_json(web_url("cart.add", game_id))
-    
+
     def web_cart_add_series(self, series_id):
         return self.get_json(web_url("cart.add_series", series_id))
-    
+
     def web_cart_remove(self, game_id):
         return self.get_json(web_url("cart.remove", game_id))
 
@@ -397,7 +417,7 @@ class GogApi:
             return self.get_json(web_url("checkout"))
         else:
             return self.get_json(web_url("checkout_id", order_id))
-    
+
     def web_checkout_manual(self, order_id):
         return self.get_json(web_url("checkout_manual", order_id))
 
@@ -406,28 +426,34 @@ class GogApi:
     def galaxy_file(self, game_id, dl_url):
         dl_url = dl_url.lstrip("/")
         return self.get_json(galaxy_url("file", game_id, dl_url))
-    
+
     def galaxy_user(self, user_id=None):
         if user_id is None:
             user_id = self.token.user_id
         return self.get_json(galaxy_url("user", user_id))
-    
+
     def galaxy_friends(self, user_id=None):
         if user_id is None:
             user_id = self.token.user_id
         return self.get_json(galaxy_url("friends", user_id))
-    
+
     def galaxy_invitations(self, user_id=None):
         if user_id is None:
             user_id = self.token.user_id
         return self.get_json(galaxy_url("invitations", user_id))
-    
+
     def galaxy_status(self, user_id=None):
         if user_id is None:
             user_id = self.token.user_id
         reqdata = {"version": CLIENT_VERSION}
-        self.get(galaxy_url("status", user_id), data=reqdata)
-    
+        self.post(galaxy_url("status", user_id), data=reqdata)
+
+    def galaxy_statuses(self, user_ids):
+        user_ids_str = ",".join(user_ids)
+        params = {"user_id": user_ids_str}
+        #self.request("OPTIONS", galaxy_url("statuses"), params=params)
+        return self.get_json(galaxy_url("statuses"), params=params)
+
     def galaxy_achievements(self, game_id, user_id=None):
         if user_id is None:
             user_id = self.token.user_id
@@ -443,7 +469,7 @@ class GogApi:
             user_id = self.token.user_id
         return self.get_json(
             galaxy_url("friends.achievements", game_id, user_id))
-    
+
     def galaxy_friends_sessions(self, game_id, user_id=None):
         if user_id is None:
             user_id = self.token.user_id
@@ -479,6 +505,9 @@ class LoginRequestHandler(http.server.BaseHTTPRequestHandler):
 
 class Token:
     def set_data(self, token_data):
+        if "error" in token_data:
+            raise ApiError(token_data["error"], token_data["error_description"])
+
         self.access_token = token_data["access_token"]
         self.refresh_token = token_data["refresh_token"]
         self.expires_in = timedelta(seconds=token_data["expires_in"])
@@ -491,7 +520,7 @@ class Token:
                 token_data["created"], tz=timezone.utc)
         else:
             self.created = datetime.now(tz=timezone.utc)
-    
+
     def get_data(self):
         token_data = {
             "access_token": self.access_token,
@@ -511,7 +540,7 @@ class Token:
     def load(self, filename):
         with open(filename, "r") as f:
             self.set_data(json.load(f))
-    
+
     def save(self, filename):
         with open(filename, "w") as f:
             json.dump(self.get_data(), f, indent=2, sort_keys=True)
@@ -523,7 +552,7 @@ class Token:
 
     def from_login(server_ip="127.0.0.1", browser_callback=None):
         httpd = http.server.HTTPServer((server_ip, 0), LoginRequestHandler)
-        
+
         redirect_url = "http://{}:{}/token".format(*httpd.server_address)
         redirect_url_quoted = urllib.parse.quote(redirect_url)
         auth_url = galaxy_url(
@@ -534,12 +563,12 @@ class Token:
             print("If that didn't work, please manually open", auth_url)
         else:
             browser_callback(auth_url)
-        
+
         httpd.handle_request()
         httpd.server_close()
         if httpd.login_code is None:
             raise Exception("Authorization failed")
-        
+
         token_query = {
             "client_id": CLIENT_ID,
             "client_secret": CLIENT_SECRET,
@@ -561,7 +590,7 @@ class Token:
         }
         token_resp = requests.get(galaxy_url("token"), params=token_query)
         self.set_data(token_resp.json())
-    
+
     def expired(self, margin=timedelta(seconds=60)):
         expires_at = self.created + self.expires_in
         return (datetime.now(timezone.utc) - expires_at) > margin
@@ -569,14 +598,14 @@ class Token:
 
 
 if __name__ == "__main__":
-    if os.path.exists("token.json"):
+    try:
         token = Token.from_file("token.json")
         token.refresh()
-    else:
+    except (ApiError, FileNotFoundError) as e:
         token = Token.from_login()
     token.save("token.json")
 
     api = GogApi(token)
-    
+
     from pprint import pprint
     pprint(api.web_user_data())
