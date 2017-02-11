@@ -14,41 +14,13 @@ CLIENT_ID = "46899977096215655"
 CLIENT_SECRET = "9d85c43b1482497dbbce61f6e4aa173a433796eeae2ca8c5f6129f2dc4de46d9"
 CLIENT_VERSION = "1.1.24.16" # Just for their statistics
 
-PAGE_SUCCESS = """\
-<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login successful</title>
-  </head>
-  <body>
-    <h1>Login successful!</h1>
-    <p>
-      You can close this tab now
-    </p>
-  </body>
-</html>
+LOGIN_INSTRUCTIONS = """\
+Your web browser has been opened to allow you to log in.
+If that did not work, please manually open {auth_url}
+After completing the login you will be redirected to a blank page. Copy the
+random characters in the URL after &code= and paste them into this window
 """
 
-PAGE_ERROR = """\
-<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login failed</title>
-  </head>
-  <body>
-    <h1>Login failed</h1>
-    <p>
-      Something went wrong and the login code is missing from the url.
-    </p>
-  </body>
-</html>
-"""
-
-#GOGDATA_RE = re.compile(r"var gogData = (\{.+?\});")
 GOGDATA_RE = re.compile(r"gogData\.?(.*?) = (.+);")
 
 web_config = {
@@ -486,23 +458,6 @@ class GogApi:
 
 
 
-class LoginRequestHandler(http.server.BaseHTTPRequestHandler):
-    def do_GET(self):
-        path_urlparse = urllib.parse.urlparse(self.path)
-        query = urllib.parse.parse_qs(path_urlparse.query)
-        if "code" not in query:
-            self.send_response(400)
-            self.send_header("Content-type", "text/html")
-            self.end_headers()
-            self.wfile.write(PAGE_ERROR.encode("utf8"))
-            self.server.login_code = None
-        else:
-            self.send_response(200)
-            self.send_header("Content-type", "text/html")
-            self.end_headers()
-            self.wfile.write(PAGE_SUCCESS.encode("utf8"))
-            self.server.login_code = query["code"][0]
-
 class Token:
     def set_data(self, token_data):
         if "error" in token_data:
@@ -551,29 +506,23 @@ class Token:
         return token
 
     def from_login(server_ip="127.0.0.1", browser_callback=None):
-        httpd = http.server.HTTPServer((server_ip, 0), LoginRequestHandler)
-
-        redirect_url = "http://{}:{}/token".format(*httpd.server_address)
+        redirect_url = "https://embed.gog.com/on_login_success?origin=client"
         redirect_url_quoted = urllib.parse.quote(redirect_url)
         auth_url = galaxy_url(
             "auth", client_id=CLIENT_ID, redir_uri=redirect_url_quoted)
         if browser_callback is None:
             webbrowser.open_new_tab(auth_url)
-            print("Your web browser has been opened to allow you to log in.")
-            print("If that didn't work, please manually open", auth_url)
+            print(LOGIN_INSTRUCTIONS.format(auth_url=auth_url))
         else:
             browser_callback(auth_url)
 
-        httpd.handle_request()
-        httpd.server_close()
-        if httpd.login_code is None:
-            raise Exception("Authorization failed")
+        login_code = input("Login code: ")
 
         token_query = {
             "client_id": CLIENT_ID,
             "client_secret": CLIENT_SECRET,
             "grant_type": "authorization_code",
-            "code": httpd.login_code,
+            "code": login_code,
             "redirect_uri": redirect_url # Needed for origin verification
         }
         token_resp = requests.get(galaxy_url("token"), params=token_query)
