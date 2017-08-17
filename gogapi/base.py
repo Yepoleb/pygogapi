@@ -1,16 +1,18 @@
 import http.cookiejar
 import json
 import re
-import requests
 import logging
 import html.parser
+import zlib
+
+import requests
 
 from gogapi import urls
 from gogapi.product import Product, Series
 
 DEBUG_JSON = False
 GOGDATA_RE = re.compile(r"gogData\.?(.*?) = (.+);")
-CLIENT_VERSION = "1.1.24.16" # Just for their statistics
+CLIENT_VERSION = "1.2.17.9" # Just for their statistics
 USER_AGENT = "GOGGalaxyClient/{} pygogapi/0.1".format(CLIENT_VERSION)
 
 
@@ -82,6 +84,7 @@ class GogApi:
             log.debug("%s %s %s", method, url, kwargs["params"])
         else:
             log.debug("%s %s", method, url)
+
         return requests.request(method, url, headers=headers, **kwargs)
 
     def get(self, *args, **kwargs):
@@ -90,11 +93,18 @@ class GogApi:
     def post(self, *args, **kwargs):
         return self.request("POST", *args, **kwargs)
 
-    def request_json(self, *args, **kwargs):
+    def request_json(self, *args, compressed=False, **kwargs):
         resp = self.request(*args, **kwargs)
-        if DEBUG_JSON:
-            log.debug(resp.text)
-        return resp.json()
+        if not compressed:
+            if DEBUG_JSON:
+                log.debug(resp.text)
+            return resp.json()
+        else:
+            json_comp = resp.content
+            json_text = zlib.decompress(json_comp, 15).decode("utf-8")
+            if DEBUG_JSON:
+                log.debug(json_text)
+            return json.loads(json_text)
 
     def get_json(self, *args, **kwargs):
         return self.request_json("GET", *args, **kwargs)
@@ -379,8 +389,16 @@ class GogApi:
             authorized=False)
 
     def galaxy_builds(self, game_id, system):
-        return self.get_json(urls.galaxy("cs.builds", game_id, system),
-                             authorized=False)
+        return self.get_json(
+            urls.galaxy("cs.builds", game_id, system), authorized=False
+        )
+
+    def galaxy_cs_meta(self, meta_id):
+        return self.get_json(
+            urls.galaxy("cs.meta", meta_id[0:2], meta_id[2:4], meta_id),
+            compressed=True,
+            authorized=False
+        )
 
     def galaxy_client_config():
         return self.get_json(urls.galaxy("client-config"), authorized=False)

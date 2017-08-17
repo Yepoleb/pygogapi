@@ -1,8 +1,22 @@
-import arrow
+from datetime import datetime
+
+import dateutil.parser
 from decimal import Decimal
 
 from gogapi.meta import GOGBase, Property
 from gogapi.contentsystem import Build
+from gogapi.parsers import (
+    parse_os_reqs, parse_price, parse_series, parse_system_reqs,
+    parse_systems_glx, parse_systems_gog, maybe_timestamp
+)
+
+GOGDATA_TYPE = {
+    1: "game",
+    2: "pack",
+    3: "dlc"
+}
+
+
 
 def parse_systems_glx(system_compat):
     systems = []
@@ -54,15 +68,9 @@ def parse_series(api, series_data):
 
 def maybe_timestamp(timestamp):
     if timestamp:
-        return arrow.get(timestamp)
+        return dateutil.parser.parse(timestamp)
     else:
         return None
-
-GOGDATA_TYPE = {
-    1: "game",
-    2: "pack",
-    3: "dlc"
-}
 
 
 
@@ -220,7 +228,7 @@ class Product(GOGBase):
         self.is_available_in_account = \
             data["availability"]["isAvailableInAccount"]
         self.is_game = data["isGame"]
-        self.release_date = arrow.get(data["releaseDate"])
+        self.release_date = datetime.fromtimestamp(data["releaseDate"])
         self.price = parse_price(data["price"])
         self.link_support = data["supportUrl"]
         self.category = data["category"]

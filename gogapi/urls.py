@@ -82,6 +82,7 @@ galaxy_config = {
     "token": "auth:/token",
     "client-config": "cfg:/desktop-galaxy-client/config.json",
     "cs.builds": "cont:/products/{}/os/{}/builds?generation=2",
+    "cs.meta": "cdn:/content-system/v2/meta/{}/{}/{}"
 }
 
 gog_servers = {

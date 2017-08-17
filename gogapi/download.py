@@ -1,4 +1,4 @@
-import arrow
+import dateutil.parser
 import xml.etree.ElementTree as ETree
 
 
@@ -52,7 +52,7 @@ class File(GOGBase):
         self.available = bool(int(tree.attrib["available"]))
         self.notavailablemsg = tree.attrib["notavailablemsg"]
         self.md5 = tree.attrib["md5"]
-        self.timestamp = arrow.get(tree.attrib["timestamp"])
+        self.timestamp = dateutil.parser.parse(tree.attrib["timestamp"])
         self.chunks = []
 
         for chunk_elem in tree:
