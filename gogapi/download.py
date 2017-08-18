@@ -22,7 +22,7 @@ class Download:
         self.bonus_type = data.get("type")
         self.count = data.get("count")
 
-class File(GOGBase):
+class File(GogBase):
     securelink = Property("infolink")
     chunklink = Property("infolink")
 

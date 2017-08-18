@@ -3,7 +3,7 @@ from datetime import datetime
 import dateutil.parser
 from decimal import Decimal
 
-from gogapi.meta import GOGBase, Property
+from gogapi.meta import GogBase, Property
 from gogapi.contentsystem import Build
 from gogapi.parsers import (
     parse_os_reqs, parse_price, parse_series, parse_system_reqs,
@@ -74,7 +74,7 @@ def maybe_timestamp(timestamp):
 
 
 
-class Product(GOGBase):
+class Product(GogBase):
     title = Property("glx", "gog")
     slug = Property("glx", "gog")
     game_type = Property("glx", "gog")

@@ -17,15 +17,15 @@ class Property:
         instance._updated[self.name] = True
 
 # https://stackoverflow.com/a/42023924
-class GOGMeta(type):
+class GogMeta(type):
     def __new__(mcls, name, bases, attrs):
-        cls = super(GOGMeta, mcls).__new__(mcls, name, bases, attrs)
+        cls = super(GogMeta, mcls).__new__(mcls, name, bases, attrs)
         for attr, obj in attrs.items():
             if isinstance(obj, Property):
                 obj.__set_name__(cls, attr)
         return cls
 
 # TODO: rename to GogBase
-class GOGBase(metaclass=GOGMeta):
+class GogBase(metaclass=GogMeta):
     def __init__(self):
         self._updated = {}

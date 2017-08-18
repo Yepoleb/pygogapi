@@ -1,4 +1,4 @@
-from gogapi.meta import GOGBase, Property
+from gogapi.meta import GogBase, Property
 from gogapi.parsers import normalize_system
 
 
@@ -9,6 +9,7 @@ def normalize_system(system_name):
         return mac
     else:
         return system_name
+
 
 class DepotFileV1:
     generation = 1
@@ -67,7 +68,7 @@ class DepotChunkV2:
         self.md5 = chunk_data["md5"]
         self.size = chunk_data["size"]
 
-class DepotV1(GOGBase):
+class DepotV1(GogBase):
     generation = 1
     name = Property("manifest")
     files = Property("manifest")
@@ -108,7 +109,7 @@ class DepotV1(GOGBase):
         return self.url[:self.url.rfind('/') + 1] + self.manifest_name
 
 
-class DepotV2(GOGBase):
+class DepotV2(GogBase):
     generation = 2
     files = Property("manifest")
     small_files_container = Property("manifest")
@@ -218,7 +219,7 @@ class RepositoryProductV2:
         self.temp_executable = product_data["temp_executable"]
 
 
-class Build(GOGBase):
+class Build(GogBase):
     repository = Property("repo")
 
     def __init__(self, api, build_data):
