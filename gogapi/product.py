@@ -1,14 +1,12 @@
 from datetime import datetime
+import itertools
 
 import dateutil.parser
 from decimal import Decimal
 
 from gogapi.meta import GogBase, Property
 from gogapi.contentsystem import Build
-from gogapi.parsers import (
-    parse_os_reqs, parse_price, parse_series, parse_system_reqs,
-    parse_systems_glx, parse_systems_gog, maybe_timestamp
-)
+from gogapi.normalization import normalize_system
 
 GOGDATA_TYPE = {
     1: "game",
@@ -18,47 +16,22 @@ GOGDATA_TYPE = {
 
 
 
-def parse_systems_glx(system_compat):
-    systems = []
-    if system_compat["windows"]:
-        systems.append("windows")
-    if system_compat["osx"]:
-        systems.append("mac")
-    if system_compat["linux"]:
-        systems.append("linux")
-    return systems
-
-def parse_systems_gog(system_compat):
-    systems = []
-    if system_compat["Windows"]:
-        systems.append("windows")
-    if system_compat["Mac"]:
-        systems.append("mac")
-    if system_compat["Linux"]:
-        systems.append("linux")
-    return systems
-
-def parse_os_reqs(os_reqs):
-    return {
-        "windows": os_reqs["Windows"],
-        "mac": os_reqs["Mac OS X"],
-        "linux": os_reqs["Linux"]
-    }
+def parse_systems(system_compat):
+    return [
+        normalize_system(system)
+        for system, supported in system_compat.items() if supported]
 
 def parse_system_reqs(system_reqs):
-    return {
-        "windows": system_reqs["windows"],
-        "mac": system_reqs["osx"],
-        "linux": system_reqs["linux"]
-    }
+    return dict(
+        (normalize_system(system), reqs)
+        for system, reqs in system_reqs.items())
 
 def parse_price(price_data):
     return Price(
         base=Decimal(price_data["baseAmount"]),
         final=Decimal(price_data["finalAmount"]),
         symbol=price_data["symbol"],
-        promo_id=price_data.get("promoId", None)
-    )
+        promo_id=price_data.get("promoId", None))
 
 def parse_series(api, series_data):
     series = api.get_series(series_data["id"])
@@ -71,6 +44,40 @@ def maybe_timestamp(timestamp):
         return dateutil.parser.parse(timestamp)
     else:
         return None
+
+def add_products_gog(api, prod_list, json_data):
+    if not json_data:
+        return
+    for prod_data in json_data:
+        product = api.get_product(prod_data["id"])
+        product.load_gog_min(prod_data)
+        prod_list.append(product)
+
+def add_products_glx(api, prod_list, json_data):
+    if not json_data:
+        return
+    for prod_data in json_data:
+        product = api.get_product(prod_data["id"])
+        product.load_glx(prod_data)
+        prod_list.append(product)
+
+# From itertools documentation
+def grouper(iterable, n, fillvalue=None):
+    "Collect data into fixed-length chunks or blocks"
+    # grouper('ABCDEFG', 3, 'x') --> ABC DEF Gxx"
+    args = [iter(iterable)] * n
+    return itertools.zip_longest(*args, fillvalue=fillvalue)
+
+# TODO: Move to base
+MAX_BATCH_SIZE = 50
+def preload_glx(products, expand=None):
+    api = products[0].api
+    for product_group in grouper(products, MAX_BATCH_SIZE):
+        galaxy_results = api.galaxy_products(
+            product.id for product in product_group,
+            expand=expand)
+        for res, product in zip(galaxy_result, product_group):
+            product.load_glx(res)
 
 
 
@@ -103,7 +110,7 @@ class Product(GogBase):
     download_size = Property("gog")
     installers = Property("glx_ext")
     patches = Property("glx_ext")
-    #language_packs = Property("glx_ext")
+    language_packs = Property("glx_ext")
     bonus_content = Property("glx_ext")
     extra_requirements = Property("gog")
     features = Property("gog")
@@ -156,14 +163,14 @@ class Product(GogBase):
     def __init__(self, api, product_id, slug=None):
         super().__init__()
         self.api = api
-        self.id = product_id
+        self.id = int(product_id)
         if slug is not None:
             self.slug = slug
 
     def load_glx(self, data):
         self.title = data["title"]
         self.slug = data["slug"]
-        self.content_systems = parse_systems_glx(
+        self.content_systems = parse_systems(
             data["content_system_compatibility"])
         self.languages = list(data["languages"].keys())
         self.link_purchase = data["links"]["purchase_link"]
@@ -201,7 +208,7 @@ class Product(GogBase):
                 for dl_data in data["downloads"]["bonus_content"]]
         if "expanded_dlcs" in data:
             self.dlcs = []
-            self.api.add_products_glx(self.dlcs, data["expanded_dlcs"])
+            add_products_glx(self.api, self.dlcs, data["expanded_dlcs"])
         if "description" in data:
             self.description = data["description"]["full"]
             self.description_lead = data["description"]["lead"]
@@ -212,8 +219,8 @@ class Product(GogBase):
             self.videos = data["videos"]
         if "related_products" in data:
             self.related_products = []
-            self.api.add_products_glx(
-                self.related_products, data["related_products"])
+            add_products_glx(
+                self.api, self.related_products, data["related_products"])
         if "changelog" in data:
             self.changelog = data["changelog"]
 
@@ -244,7 +251,7 @@ class Product(GogBase):
         self.image_logo = data["image"]
         self.link_card = data["url"]
         self.is_price_visible = data["isPriceVisible"]
-        self.systems = parse_systems_gog(data["worksOn"])
+        self.systems = parse_systems(data["worksOn"])
 
     def load_gog(self, data):
         self.image_background = data["backgroundImageSource"] + ".jpg"
@@ -265,7 +272,7 @@ class Product(GogBase):
         self.brand_ratings = data["brandRatings"]
         self.children = []
         self.api.add_products_gog(self.children, data["children"])
-        self.os_requirements = parse_os_reqs(data["osRequirements"])
+        self.os_requirements = parse_system_reqs(data["osRequirements"])
         self.system_requirements = parse_system_reqs(
             data["systemRequirements"])
         self.recommendations = []
