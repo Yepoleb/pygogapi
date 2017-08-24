@@ -416,53 +416,53 @@ class GogApi:
 
     def galaxy_product(self, game_id, expand=None):
         if not expand:
-            params = None
+            params = {}
         elif expand is True:
             params = {"expand": ",".join(PRODUCT_EXPANDABLE)}
         else:
             params = {"expand": ",".join(expand)}
-        return self.get_json(urls.galaxy("product", game_id), params=params,
-            authorized=False)
+
+        if self.locale[2]:
+            params["locale"] = self.locale[2]
+
+        return self.get_json(
+                urls.galaxy("product", game_id), params=params,
+                authorized=False)
+
+    def galaxy_products(self, game_ids, expand=None):
+        if not expand:
+            params = {}
+        elif expand is True:
+            params = {"expand": ",".join(PRODUCT_EXPANDABLE)}
+        else:
+            params = {"expand": ",".join(expand)}
+
+        if self.locale[2]:
+            params["locale"] = self.locale[2]
+
+        ids_string = ",".join(game_ids)
+        params["ids"] = ids_string
+        return self.get_json(
+            urls.galaxy("products"), params=params, authorized=False)
 
     def galaxy_builds(self, game_id, system):
         return self.get_json(
-            urls.galaxy("cs.builds", game_id, system), authorized=False
-        )
+            urls.galaxy("cs.builds", game_id, system), authorized=False)
 
     def galaxy_cs_meta(self, meta_id):
         return self.get_json(
             urls.galaxy("cs.meta", meta_id[0:2], meta_id[2:4], meta_id),
             compressed=True,
-            authorized=False
-        )
+            authorized=False)
 
     def galaxy_client_config():
         return self.get_json(urls.galaxy("client-config"), authorized=False)
 
     def get_product(self, product_id):
-        # Get product from cache or create new
-        # TODO: switch to decorator
-        return self.products.get(product_id, Product(self, product_id))
+        return Product(self, product_id)
 
     def get_series(self, series_id):
-        return self.series.get(series_id, Series(self, series_id))
-
-    def add_products_gog(self, prod_list, json_data):
-        # TODO: should not be part of GogApi
-        if not json_data:
-            return
-        for prod_data in json_data:
-            product = self.get_product(prod_data["id"])
-            product.load_gog_min(prod_data)
-            prod_list.append(product)
-
-    def add_products_glx(self, prod_list, json_data):
-        if not json_data:
-            return
-        for prod_data in json_data:
-            product = self.get_product(prod_data["id"])
-            product.load_glx(prod_data)
-            prod_list.append(product)
+        return Series(self, series_id)
 
     def search(self, query):
         search_data = self.web_search(query)

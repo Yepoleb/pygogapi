@@ -25,7 +25,6 @@ class GogMeta(type):
                 obj.__set_name__(cls, attr)
         return cls
 
-# TODO: rename to GogBase
 class GogBase(metaclass=GogMeta):
     def __init__(self):
         self._updated = {}

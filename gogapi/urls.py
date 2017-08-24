@@ -78,6 +78,7 @@ galaxy_config = {
         "gameplay:/clients/{}/users/{}/friends_achievements_unlock_progresses",
     "friends.sessions": "gameplay:/clients/{}/users/{}/friends_sessions",
     "product": "api:/products/{}",
+    "products": "api:/products",
     "auth": "auth:/auth?client_id={client_id}&redirect_uri={redir_uri}&response_type=code&layout=client2",
     "token": "auth:/token",
     "client-config": "cfg:/desktop-galaxy-client/config.json",
