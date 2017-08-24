@@ -8,6 +8,7 @@ import requests
 
 from gogapi import urls
 from gogapi.product import Product, Series
+from gogapi.search import SearchResult
 
 DEBUG_JSON = False
 GOGDATA_RE = re.compile(r"gogData\.?(.*?) = (.+);")
@@ -160,7 +161,7 @@ class GogApi:
     def web_account_gamedetails(self, game_id):
         return self.get_json(urls.web("account.gamedetails", game_id))
 
-    def web_account_search(self):
+    def web_account_search(self, query):
         """
         Allowed query keys:
         category: Genre
@@ -435,3 +436,7 @@ class GogApi:
             product = self.get_product(prod_data["id"])
             product.load_glx(prod_data)
             prod_list.append(product)
+
+    def search(self, query):
+        search_data = self.web_search(query)
+        return SearchResult(self, query, search_data)
