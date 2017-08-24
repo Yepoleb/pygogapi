@@ -1,14 +1,11 @@
-from gogapi.meta import GogBase, Property
 from gogapi.normalization import normalize_system
 
 
 
-class Build(GogBase):
-    repository = Property("repo")
-
+class Build:
     def __init__(self, api, build_data):
-        super().__init__()
         self.api = api
+        self.loaded = set()
         self.id = build_data["build_id"]
         self.product_id = int(build_data["product_id"])
         self.os = normalize_system(build_data["os"])
@@ -26,10 +23,14 @@ class Build(GogBase):
             raise Exception("Wrong generation: {}".format(self.generation))
         self.repository = RepositoryV1(self.api, self.link, repo_data)
 
+        self.loaded.add("repo")
+
     def load_repo_v2(self, repo_data):
         if self.generation != 2:
             raise Exception("Wrong generation: {}".format(self.generation))
         self.repository = RepositoryV2(self.api, repo_data)
+
+        self.loaded.add("repo")
 
     def update_repo(self):
         if self.generation == 1:
@@ -121,15 +122,13 @@ class SupportCommandV1:
             normalize_system(system) for system in command_data["systems"]]
         self.argument = command_data["argument"]
 
-class DepotV1(GogBase):
+class DepotV1:
     generation = 1
-    name = Property("manifest")
-    files = Property("manifest")
 
     def __init__(self, api, url, depot_data):
-        super().__init__()
         self.api = api
         self.url = url
+        self.loaded = set()
         self.load_depot(depot_data)
 
     def load_depot(self, depot_data):
@@ -146,6 +145,8 @@ class DepotV1(GogBase):
             DepotFileV1(self.api, file_data)
             for file_data in manifest_data["depot"]["files"]]
         assert manifest_data["version"] == self.generation
+
+        self.loaded.add("manifest")
 
     def update_manifest(self):
         manifest_data = self.api.get_json(self.manifest_url)
@@ -221,14 +222,12 @@ class RepositoryProductV2:
         self.temp_executable = product_data["temp_executable"]
 
 
-class DepotV2(GogBase):
+class DepotV2:
     generation = 2
-    files = Property("manifest")
-    small_files_container = Property("manifest")
 
     def __init__(self, api, depot_data):
-        super().__init__()
         self.api = api
+        self.loaded = set()
         self.load_depot(depot_data)
 
     def load_depot(self, depot_data):
@@ -249,6 +248,8 @@ class DepotV2(GogBase):
         self.small_files_container = DepotFileV2(
             self.api, manifest_data["depot"]["smallFilesContainer"])
         assert manifest_data["version"] == self.generation
+
+        self.loaded.add("manifest")
 
     def update_manifest(self):
         manifest_data = self.api.galaxy_cs_meta(self.manifest_id)

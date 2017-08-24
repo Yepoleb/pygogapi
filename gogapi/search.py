@@ -1,6 +1,8 @@
-class SearchResult:
+from gogapi.base import GogObject
+
+class SearchResult(GogObject):
     def __init__(self, api, query, search_data):
-        self.api = api
+        super().__init__(api)
         self.query = query
         self.load_search(search_data)
 
@@ -8,8 +10,8 @@ class SearchResult:
         self.products = []
         for product_data in search_data["products"]:
             product = self.api.get_product(product_data["id"])
-            prod.load_gog_min(product_data)
-            products.append(product)
+            product.load_gog_min(product_data)
+            self.products.append(product)
 
         self.page = int(search_data["page"])
         self.total_pages = search_data["totalPages"]
@@ -21,10 +23,15 @@ class SearchResult:
         assert self.page < self.total_pages
         new_query = self.query.copy()
         new_query["page"] = self.page + 1
-        return self.api.search(new_query)
+        return self.api.search(**new_query)
 
     def previous_page(self):
         assert self.page > 0
         new_query = self.query.copy()
         new_query["page"] = self.page - 1
-        return self.api.search(new_query)
+        return self.api.search(**new_query)
+
+    def __repr__(self):
+        return self.simple_repr(
+            ["page", "total_pages", "total_results", "total_games_found",
+            "total_movies_found", "products"])

@@ -4,8 +4,8 @@ import itertools
 import dateutil.parser
 from decimal import Decimal
 
-from gogapi.meta import GogBase, Property
 from gogapi.contentsystem import Build
+from gogapi.download import Download
 from gogapi.normalization import normalize_system
 
 GOGDATA_TYPE = {
@@ -22,9 +22,12 @@ def parse_systems(system_compat):
         for system, supported in system_compat.items() if supported]
 
 def parse_system_reqs(system_reqs):
-    return dict(
-        (normalize_system(system), reqs)
-        for system, reqs in system_reqs.items())
+    if not system_reqs:
+        return None
+    else:
+        return dict(
+            (normalize_system(system), reqs)
+            for system, reqs in system_reqs.items())
 
 def parse_price(price_data):
     return Price(
@@ -33,17 +36,13 @@ def parse_price(price_data):
         symbol=price_data["symbol"],
         promo_id=price_data.get("promoId", None))
 
-def parse_series(api, series_data):
-    series = api.get_series(series_data["id"])
-    self.series.load_gog(data["series"])
-    api.add_products_gog(series.products, series_data["products"])
-    return series
-
 def maybe_timestamp(timestamp):
-    if timestamp:
-        return dateutil.parser.parse(timestamp)
-    else:
+    if not timestamp:
         return None
+    if isinstance(timestamp, int):
+        return datetime.fromtimestamp(float(timestamp))
+    else:
+        return dateutil.parser.parse(timestamp)
 
 def add_products_gog(api, prod_list, json_data):
     if not json_data:
@@ -61,107 +60,11 @@ def add_products_glx(api, prod_list, json_data):
         product.load_glx(prod_data)
         prod_list.append(product)
 
-# From itertools documentation
-def grouper(iterable, n, fillvalue=None):
-    "Collect data into fixed-length chunks or blocks"
-    # grouper('ABCDEFG', 3, 'x') --> ABC DEF Gxx"
-    args = [iter(iterable)] * n
-    return itertools.zip_longest(*args, fillvalue=fillvalue)
-
-# TODO: Move to base
-MAX_BATCH_SIZE = 50
-def preload_glx(products, expand=None):
-    api = products[0].api
-    for product_group in grouper(products, MAX_BATCH_SIZE):
-        galaxy_results = api.galaxy_products(
-            product.id for product in product_group,
-            expand=expand)
-        for res, product in zip(galaxy_result, product_group):
-            product.load_glx(res)
 
 
-
-class Product(GogBase):
-    title = Property("glx", "gog")
-    slug = Property("glx", "gog")
-    game_type = Property("glx", "gog")
-    description = Property("glx_ext", "gog")
-    description_lead = Property("glx_ext", "gog")
-    cool_about_it = Property("glx_ext", "gog")
-    image_background = Property("glx", "gog")
-    image_logo = Property("glx", "gog")
-    link_card = Property("glx", "gog")
-    link_forum = Property("glx", "gog")
-    link_support = Property("glx", "gog")
-    in_development = Property("glx", "gog")
-    dlcs = Property("glx", "gog")
-
-    #bonus_content = Property("gog")
-    brand_ratings = Property("gog")
-    buyable = Property("gog")
-    category = Property("gog")
-    changelog = Property("glx_ext")
-    children = Property("gog")
-    content_systems = Property("glx")
-    copyrights = Property("gog")
-    custom_attributes = Property("gog")
-    developer = Property("gog")
-    development_until = Property("glx")
-    download_size = Property("gog")
-    installers = Property("glx_ext")
-    patches = Property("glx_ext")
-    language_packs = Property("glx_ext")
-    bonus_content = Property("glx_ext")
-    extra_requirements = Property("gog")
-    features = Property("gog")
-    genres = Property("gog")
-    image_background_bw = Property("gog")
-    image_logo_facebook = Property("gog")
-    image_icon = Property("glx")
-    image_logo_2x = Property("glx")
-    image_sidebar_icon = Property("glx")
-    image_sidebar_icon_2x = Property("glx")
-    is_available = Property("gog")
-    is_available_in_account = Property("gog")
-    is_coming_soon = Property("gog")
-    is_discounted = Property("gog")
-    is_game = Property("gog")
-    is_movie = Property("gog")
-    is_pre_order = Property("glx")
-    is_price_visible = Property("gog")
-    is_secret = Property("glx")
-    languages = Property("glx")
-    languages_str = Property("gog")
-    link_purchase = Property("glx")
-    #media = Property("gog")
-    #notification = Property("gog")
-    original_category = Property("gog")
-    os_requirements = Property("gog")
-    packs = Property("gog")
-    parents = Property("gog")
-    price = Property("gog")
-    publisher = Property("gog")
-    rating = Property("gog")
-    recommendations = Property("gog")
-    related_products = Property("glx_ext")
-    release_date = Property("gog")
-    #required_products = Property("gog")
-    reviewable = Property("gog")
-    #reviews = Property("gog")
-    #sales_visibility = Property("gog")
-    screenshot_ids = Property("gog")
-    screenshots = Property("glx_ext")
-    seo_description = Property("gog")
-    seo_keywords = Property("gog")
-    series = Property("gog")
-    store_date = Property("glx")
-    system_requirements = Property("gog")
-    systems = Property("gog")
-    videos = Property("glx_ext")
-    votes_count = Property("gog")
-
+class Product:
     def __init__(self, api, product_id, slug=None):
-        super().__init__()
+        self.loaded = set()
         self.api = api
         self.id = int(product_id)
         if slug is not None:
@@ -187,13 +90,15 @@ class Product(GogBase):
         self.image_background = data["images"]["background"]
         self.image_logo = data["images"]["logo"]
         self.image_logo_2x = data["images"]["logo2x"]
-        self.image_icon = data["images"]["icon"]
+        self.image_icon = data["images"].get("icon")
         self.image_sidebar_icon = data["images"]["sidebarIcon"]
         self.image_sidebar_icon_2x = data["images"]["sidebarIcon2x"]
-        self.dlcs = []
-        if "dlcs" in data:
-            for dlc in data["dlcs"]["products"]:
-                self.dlcs.append(self.api.get_product(dlc["id"]))
+        if data["dlcs"]:
+            self.dlcs = [
+                self.api.get_product(dlc["id"])
+                for dlc in data["dlcs"]["products"]]
+        else:
+            self.dlcs = []
 
         # Expanded
 
@@ -206,23 +111,50 @@ class Product(GogBase):
                 for dl_data in data["downloads"]["language_packs"]]
             self.bonus_content = [Download(self.api, dl_data)
                 for dl_data in data["downloads"]["bonus_content"]]
+        else:
+            self.installers = None
+            self.patches = None
+            self.language_packs = None
+            self.bonus_content = None
+
         if "expanded_dlcs" in data:
             self.dlcs = []
             add_products_glx(self.api, self.dlcs, data["expanded_dlcs"])
+        else:
+            self.dlcs = None
+
         if "description" in data:
             self.description = data["description"]["full"]
             self.description_lead = data["description"]["lead"]
             self.cool_about_it = data["description"]["whats_cool_about_it"]
+        else:
+            self.description = None
+            self.description_lead = None
+            self.cool_about_it = None
+
         if "screenshots" in data:
             self.screenshots = data["screenshots"]
+        else:
+            self.screenshots = None
+
         if "videos" in data:
             self.videos = data["videos"]
+        else:
+            self.videos = None
+
         if "related_products" in data:
             self.related_products = []
             add_products_glx(
                 self.api, self.related_products, data["related_products"])
+        else:
+            self.related_products = None
+
         if "changelog" in data:
             self.changelog = data["changelog"]
+        else:
+            self.changelog = None
+
+        self.loaded.add("glx")
 
     def load_gog_min(self, data):
         self.game_type = GOGDATA_TYPE[data["type"]]
@@ -235,17 +167,17 @@ class Product(GogBase):
         self.is_available_in_account = \
             data["availability"]["isAvailableInAccount"]
         self.is_game = data["isGame"]
-        self.release_date = datetime.fromtimestamp(data["releaseDate"])
+        self.release_date = maybe_timestamp(data["releaseDate"])
         self.price = parse_price(data["price"])
         self.link_support = data["supportUrl"]
         self.category = data["category"]
         self.is_discounted = data["isDiscounted"]
         self.custom_attributes = data.get("customAttributes", []) # optional
-        self.developer = data["developer"]
+        self.developer = data.get("developer") # missing in series
         self.rating = data["rating"]
         self.is_movie = data["isMovie"]
         self.buyable = data["buyable"]
-        self.publisher = data["publisher"]
+        self.publisher = data.get("publisher") # missing in series
         #self.sales_visibility IGNORED
         self.title = data["title"]
         self.image_logo = data["image"]
@@ -253,31 +185,41 @@ class Product(GogBase):
         self.is_price_visible = data["isPriceVisible"]
         self.systems = parse_systems(data["worksOn"])
 
+        self.loaded.add("gog_min")
+
     def load_gog(self, data):
+        self.load_gog_min(data)
+
         self.image_background = data["backgroundImageSource"] + ".jpg"
         self.seo_description = data["cardSeoDescription"]
-        self.series = parse_series(self.api, data["series"])
+        if data["series"]:
+            self.series = Series(self.api, data["series"])
+        else:
+            self.series = None
         self.required_products = []
-        self.api.add_products_gog(
-            self.required_products, data["requiredProducts"])
+        add_products_gog(
+            self.api, self.required_products, data["requiredProducts"])
         #self.media IGNORED
         #self.videos IGNORED
         self.dlcs = []
-        self.api.add_products_gog(self.dlcs, data["dlcs"])
+        add_products_gog(self.api, self.dlcs, data["dlcs"])
         self.cool_about_it = data["whatsCoolAboutIt"]
-        self.screenshot_ids = list(data["screenshots"].keys())
+        if data["screenshots"]:
+            self.screenshot_ids = list(data["screenshots"].keys())
+        else:
+            self.screenshot_ids = None
         self.votes_count = data["votesCount"]
         self.languages_str = data["languages"]
         #self.notification IGNORED
         self.brand_ratings = data["brandRatings"]
         self.children = []
-        self.api.add_products_gog(self.children, data["children"])
+        add_products_gog(self.api, self.children, data["children"])
         self.os_requirements = parse_system_reqs(data["osRequirements"])
         self.system_requirements = parse_system_reqs(
             data["systemRequirements"])
         self.recommendations = []
-        self.api.add_products_gog(
-            self.recommendations, data["recommendations"]["all"])
+        add_products_gog(
+            self.api, self.recommendations, data["recommendations"]["all"])
         # self.bonus_content TODO
         self.image_background_bw = data["backgroundImage"]
         self.image_logo_facebook = data["imageLogoFacebook"]
@@ -285,16 +227,18 @@ class Product(GogBase):
         # self.reviews TODO
         self.reviewable = data["canBeReviewed"]
         self.parents = []
-        self.api.add_products_gog(self.parents, data["parents"])
+        add_products_gog(self.api, self.parents, data["parents"])
         self.extra_requirements = data["extraRequirements"]
         self.packs = []
-        self.api.add_products_gog(self.packs, data["packs"])
+        add_products_gog(self.api, self.packs, data["packs"])
         self.download_size = data["downloadSize"]
         self.genres = data["genres"]
         self.features = data["features"]
-        self.seo_keywords = data["SeoKeywords"]
+        self.seo_keywords = data["cardSeoKeywords"]
         self.description = data["description"]["full"]
         self.description_lead = data["description"]["lead"]
+
+        self.loaded.add("gog")
 
     def update_glx(self):
         data = self.api.galaxy_product(self.id)
@@ -305,13 +249,16 @@ class Product(GogBase):
         self.load_glx(data)
 
     def update_gog(self):
-        data = self.api.web_games_gogdata(self.slug)
+        data = self.api.web_game_gogdata(self.slug)["gameProductData"]
         self.load_gog(data)
 
     def get_builds(self, system):
         # TODO: return counts and has_private_branches
         data = self.api.galaxy_builds(self.id, system)
         return [Build(self.api, build_data) for build_data in data["items"]]
+
+    def __repr__(self):
+        return "<Product id={}>".format(self.id)
 
 
 class Price:
@@ -337,13 +284,21 @@ class Price:
     def is_free(self):
         return self.final == Decimal(0)
 
-class Series:
-    def __init__(self, api, series_id):
-        self.api = api
-        self.id = series_id
+    def __repr__(self):
+        return "Price(base={!r}, final={!r}, symbol={!r}, promo_id={!r})"
 
-    def load_gog(self, data):
-        self.name = data["name"]
+class Series:
+    def __init__(self, api, series_data):
+        self.api = api
+        self.load_series(series_data)
+
+    def load_series(self, series_data):
+        self.id = series_data["id"]
+        self.name = series_data["name"]
         self.price = parse_price(series_data["price"])
         self.products = []
-        self.api.add_products_gog(self.products, data["products"])
+        add_products_gog(self.api, self.products, series_data["products"])
+
+    def __repr__(self):
+        return "<Series id={!r} name={!r} price={!r} products={!r}>".format(
+            self.id, self.name, self.price, self.products)

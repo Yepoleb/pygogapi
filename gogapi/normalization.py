@@ -1,7 +1,7 @@
 def normalize_system(system_name):
     system_name = system_name.lower()
     if system_name == "osx":
-        return mac
+        return "mac"
     else:
         return system_name
 

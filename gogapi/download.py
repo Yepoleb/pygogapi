@@ -2,6 +2,7 @@ import dateutil.parser
 import xml.etree.ElementTree as ETree
 
 
+
 class Download:
     def __init__(self, api, data):
         self.api = api
@@ -22,19 +23,10 @@ class Download:
         self.bonus_type = data.get("type")
         self.count = data.get("count")
 
-class File(GogBase):
-    securelink = Property("infolink")
-    chunklink = Property("infolink")
 
-    filename = Property("chunklist")
-    available = Property("chunklist")
-    notavailablemsg = Property("chunklist")
-    md5 = Property("chunklist")
-    timestamp = Property("chunklist")
-    chunks = Property("chunklist")
-
+class File:
     def __init__(self, api, data):
-        super().__init__()
+        self.loaded = set()
         self.api = api
         self.load_glx(data)
 
@@ -46,6 +38,8 @@ class File(GogBase):
     def load_infolink(self, data):
         self.securelink = data["downlink"]
         self.chunklink = data["checksum"]
+
+        self.loaded.add("infolink")
 
     def load_chunklist(self, tree):
         self.filename = tree.attrib["name"]
@@ -63,6 +57,8 @@ class File(GogBase):
                 method=chunk_elem.attrib["method"],
                 digest=chunk_elem.text
             ))
+
+        self.loaded.add("chunklist")
 
     def update_infolink(self):
         infolink_data = self.api.get_json(self.infolink)

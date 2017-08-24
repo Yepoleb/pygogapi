@@ -2,6 +2,8 @@ import urllib.parse
 
 
 web_config = {
+    "game": "/game/{}",
+
     "search.filtering": "/games/ajax/filtered",
 
     "user.data": "/userData.json",
