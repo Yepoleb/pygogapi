@@ -19,8 +19,13 @@ REQUEST_RETRIES = 3
 
 PRODUCT_EXPANDABLE = [
     "downloads", "expanded_dlcs", "description", "screenshots", "videos",
-    "related_products", "changelog"]
+    "related_products", "changelog"
+]
 USER_EXPANDABLE = ["friendStatus", "wishlistStatus", "blockedStatus"]
+LOCALE_CODES = ["de-DE", "en-US", "fr-FR", "pt-BR", "ru-RU", "zh-Hans"]
+CURRENCY_CODES = [
+    "USD", "EUR", "GBP", "AUD", "RUB", "PLN", "CAD", "CHF", "NOK", "SEK", "DKK"
+]
 
 logging.basicConfig()
 log = logging.getLogger("gogapi")
@@ -63,13 +68,13 @@ class ScriptParser(html.parser.HTMLParser):
 class GogApi:
     def __init__(self, token=None):
         self.token = token
-        self.products = {}
-        self.series = {}
+        self.locale = (None, None, None)
 
     # Helpers
 
     def request(self, method, url, authorized=True, **kwargs):
-        # Prevent getting blocked
+        # Set headers
+        # Prevent getting blocked by default
         headers = {"User-Agent": USER_AGENT}
         if self.token is not None:
             if self.token.expired():
@@ -81,6 +86,13 @@ class GogApi:
             headers = {}
         headers.update(kwargs.pop("headers", {}))
 
+        # Set cookies
+        cookies = {}
+        if all(self.locale):
+            cookies["gog_lc"] = "_".join(self.locale)
+        cookies.update(kwargs.pop("cookies", {}))
+
+        # Log request
         if "params" in kwargs:
             log.debug("%s %s %s", method, url, kwargs["params"])
         else:
@@ -134,6 +146,21 @@ class GogApi:
                     data = value_parsed
                 gogdata.update(data)
         return gogdata
+
+    def set_locale(country, currency, locale):
+        """
+        country: ISO 3166 Alpha-2
+        currency: ISO 4217
+        locale: ISO 639 + ISO 3166 like language[_territory]
+        """
+        if len(country) != 2:
+            return AttributeError("Invalid country code {}".format(country))
+        elif currency not in CURRENCY_CODES:
+            return AttributeError("Invalid currency code {}".format(locale))
+        elif locale not in LOCALE_CODES:
+            return AttributeError("Invalid locale code {}".format(locale))
+        else:
+            self.locale = (country, currency, locale)
 
     # Web APIs
 
