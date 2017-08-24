@@ -1,4 +1,3 @@
-import http.cookiejar
 import json
 import re
 import logging
@@ -14,6 +13,7 @@ DEBUG_JSON = False
 GOGDATA_RE = re.compile(r"gogData\.?(.*?) = (.+);")
 CLIENT_VERSION = "1.2.17.9" # Just for their statistics
 USER_AGENT = "GOGGalaxyClient/{} pygogapi/0.1".format(CLIENT_VERSION)
+REQUEST_RETRIES = 3
 
 
 PRODUCT_EXPANDABLE = [
@@ -85,7 +85,15 @@ class GogApi:
         else:
             log.debug("%s %s", method, url)
 
-        return requests.request(method, url, headers=headers, **kwargs)
+        # Retries
+        retries = REQUEST_RETRIES
+        while retries > 0:
+            resp = requests.request(
+                method, url, headers=headers, cookies=cookies **kwargs)
+            if resp.ok:
+                return resp
+
+        resp.raise_for_status()
 
     def get(self, *args, **kwargs):
         return self.request("GET", *args, **kwargs)
