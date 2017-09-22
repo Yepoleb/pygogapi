@@ -1,3 +1,11 @@
+import logging
+
+
+logging.basicConfig()
+logger = logging.getLogger("gogapi")
+
+
+# TODO: Implement exceptions properly
 class GogError(Exception):
     pass
 
@@ -6,6 +14,9 @@ class ApiError(GogError):
         super().__init__()
         self.error = error
         self.description = description
+
+class MissingResourceError(GogError):
+    pass
 
 class NotAuthorizedError(GogError):
     pass

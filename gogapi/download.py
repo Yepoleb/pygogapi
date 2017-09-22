@@ -1,15 +1,18 @@
 import dateutil.parser
 import xml.etree.ElementTree as ETree
 
+from gogapi.base import GogObject
 
 
-class Download:
-    def __init__(self, api, data):
-        self.api = api
-        self.load_glx(data)
 
-    def load_glx(self, data):
-        self.id = data["id"]
+class Download(GogObject):
+    def __init__(self, api, category, data):
+        super().__init__(api)
+        self.category = category
+        self.load_galaxy(data)
+
+    def load_galaxy(self, data):
+        self.id = str(data["id"])
         self.name = data["name"]
         self.total_size = data["total_size"]
         self.files = [File(self.api, file_data) for file_data in data["files"]]
@@ -17,20 +20,19 @@ class Download:
         # installers
         self.os = data.get("os")
         self.language = data.get("language")
-        self.version = data.get("version")
+        self.version = data.get("version") or None
 
         # bonus_content
         self.bonus_type = data.get("type")
         self.count = data.get("count")
 
 
-class File:
+class File(GogObject):
     def __init__(self, api, data):
-        self.loaded = set()
-        self.api = api
-        self.load_glx(data)
+        super().__init__(api)
+        self.load_galaxy(data)
 
-    def load_glx(self, data):
+    def load_galaxy(self, data):
         self.id = str(data["id"])
         self.size = data["size"]
         self.infolink = data["downlink"]
@@ -65,6 +67,8 @@ class File:
         self.load_infolink(infolink_data)
 
     def update_chunklist(self):
+        if "infolink" not in self.loaded:
+            self.update_infolink()
         xml_text = self.api.get(self.chunklink).text
         tree = ETree.fromstring(xml_text)
         self.load_chunklist(tree)

@@ -7,7 +7,7 @@ import zlib
 import requests
 
 from gogapi import urls
-from gogapi.base import NotAuthorizedError
+from gogapi.base import NotAuthorizedError, logger
 from gogapi.product import Product, Series
 from gogapi.search import SearchResult
 
@@ -28,9 +28,7 @@ CURRENCY_CODES = [
     "USD", "EUR", "GBP", "AUD", "RUB", "PLN", "CAD", "CHF", "NOK", "SEK", "DKK"
 ]
 
-logging.basicConfig()
-log = logging.getLogger("gogapi")
-log.setLevel(logging.DEBUG)
+
 
 
 
@@ -61,7 +59,8 @@ class GogApi:
 
     # Helpers
 
-    def request(self, method, url, authorized=True, **kwargs):
+    def request(self, method, url, authorized=True, allow_redirects=False,
+                **kwargs):
         # Set headers
         # Prevent getting blocked by default
         headers = {"User-Agent": USER_AGENT}
@@ -86,9 +85,9 @@ class GogApi:
             full_url = url + "?" + "&".join(
                 str(key) + "=" + str(value)
                 for key, value in kwargs["params"].items())
-            log.debug("%s %s", method, full_url)
+            logger.debug("%s %s", method, full_url)
         else:
-            log.debug("%s %s", method, url)
+            logger.debug("%s %s", method, url)
 
         # Retries
         retries = REQUEST_RETRIES
@@ -112,13 +111,13 @@ class GogApi:
         resp = self.request(*args, **kwargs)
         if not compressed:
             if DEBUG_JSON:
-                log.debug(resp.text)
+                logger.debug(resp.text)
             return resp.json()
         else:
             json_comp = resp.content
             json_text = zlib.decompress(json_comp, 15).decode("utf-8")
             if DEBUG_JSON:
-                log.debug(json_text)
+                logger.debug(json_text)
             return json.loads(json_text)
 
     def get_json(self, *args, **kwargs):
@@ -159,8 +158,7 @@ class GogApi:
     # Web APIs
 
     def web_game_gogdata(self, slug):
-        return self.get_gogdata(urls.web("game", slug),
-            authorized=False)
+        return self.get_gogdata(urls.web("game", slug), authorized=False)
 
     def web_games_gogdata(self):
         return self.get_gogdata(urls.web("account.games"))

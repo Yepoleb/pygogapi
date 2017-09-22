@@ -1,11 +1,11 @@
 from gogapi.normalization import normalize_system
+from gogapi.base import GogObject
 
 
 
-class Build:
+class Build(GogObject):
     def __init__(self, api, build_data):
-        self.api = api
-        self.loaded = set()
+        super().__init__(api)
         self.id = build_data["build_id"]
         self.product_id = int(build_data["product_id"])
         self.os = normalize_system(build_data["os"])
@@ -48,11 +48,11 @@ class Build:
 # Generation 1
 ########################################
 
-class RepositoryV1:
+class RepositoryV1(GogObject):
     generation = 1
 
     def __init__(self, api, url, repo_data):
-        self.api = api
+        super().__init__(api)
         self.url = url
         self.load_repo(repo_data)
 
@@ -79,25 +79,25 @@ class RepositoryV1:
         assert repo_data["version"] == self.generation
 
 
-class RedistV1:
+class RedistV1(GogObject):
     generation = 1
 
     def __init__(self, api, redist_data):
-        self.api = api
-        self.load_glx(redist_data)
+        super().__init__(api)
+        self.load_galaxy(redist_data)
 
-    def load_glx(self, redist_data):
+    def load_galaxy(self, redist_data):
         self.redist = redist_data["redist"]
         self.executable = redist_data["executable"]
         self.argument = redist_data["argument"]
         self.size = int(redist_data["size"])
 
 
-class RepositoryProductV1:
+class RepositoryProductV1(GogObject):
     generation = 1
 
     def __init__(self, api, product_data):
-        self.api = api
+        super().__init__(api)
         self.load_product(product_data)
 
     def load_product(self, product_data):
@@ -107,11 +107,11 @@ class RepositoryProductV1:
         self.standalone = product_data["standalone"]
 
 
-class SupportCommandV1:
+class SupportCommandV1(GogObject):
     generation = 1
 
     def __init__(self, api, command_data):
-        self.api = api
+        super().__init__(api)
         self.load_command(command_data)
 
     def load_command(self, command_data):
@@ -122,13 +122,12 @@ class SupportCommandV1:
             normalize_system(system) for system in command_data["systems"]]
         self.argument = command_data["argument"]
 
-class DepotV1:
+class DepotV1(GogObject):
     generation = 1
 
     def __init__(self, api, url, depot_data):
-        self.api = api
+        super().__init__(api)
         self.url = url
-        self.loaded = set()
         self.load_depot(depot_data)
 
     def load_depot(self, depot_data):
@@ -162,14 +161,14 @@ class DepotV1:
         # Remove file part from url and replace it with the manifest
         return self.url[:self.url.rfind('/') + 1] + self.manifest_name
 
-class DepotFileV1:
+class DepotFileV1(GogObject):
     generation = 1
 
     def __init__(self, api, file_data):
-        self.api = api
-        self.load_glx(file_data)
+        super().__init__(api)
+        self.load_galaxy(file_data)
 
-    def load_glx(self, file_data):
+    def load_galaxy(self, file_data):
         self.url = file_data["url"]
         self.size = file_data["size"]
         self.checksum = file_data["hash"]
@@ -181,11 +180,11 @@ class DepotFileV1:
 # Generation 2
 ########################################
 
-class RepositoryV2:
+class RepositoryV2(GogObject):
     generation = 2
 
     def __init__(self, api, repo_data):
-        self.api = api
+        super().__init__(api)
         self.load_repo(repo_data)
 
     def load_repo(self, repo_data):
@@ -207,11 +206,11 @@ class RepositoryV2:
         assert repo_data["version"] == self.generation
 
 
-class RepositoryProductV2:
+class RepositoryProductV2(GogObject):
     generation = 2
 
     def __init__(self, api, product_data):
-        self.api = api
+        super().__init__(api)
         self.load_product(product_data)
 
     def load_product(self, product_data):
@@ -222,12 +221,11 @@ class RepositoryProductV2:
         self.temp_executable = product_data["temp_executable"]
 
 
-class DepotV2:
+class DepotV2(GogObject):
     generation = 2
 
     def __init__(self, api, depot_data):
-        self.api = api
-        self.loaded = set()
+        super().__init__(api)
         self.load_depot(depot_data)
 
     def load_depot(self, depot_data):
@@ -256,11 +254,11 @@ class DepotV2:
         self.load_manifest(manifest_data)
 
 
-class DepotFileV2:
+class DepotFileV2(GogObject):
     generation = 2
 
     def __init__(self, api, file_data):
-        self.api = api
+        super().__init__(api)
         self.load_file(file_data)
 
     def load_file(self, file_data):
@@ -286,11 +284,11 @@ class DepotFileV2:
         return sum(chunk.size for chunk in self.chunks)
 
 
-class DepotChunkV2:
+class DepotChunkV2(GogObject):
     generation = 2
 
     def __init__(self, api, chunk_data):
-        self.api = api
+        super().__init__(api)
         self.load_chunk(chunk_data)
 
     def load_chunk(self, chunk_data):

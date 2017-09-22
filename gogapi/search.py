@@ -10,7 +10,7 @@ class SearchResult(GogObject):
         self.products = []
         for product_data in search_data["products"]:
             product = self.api.get_product(product_data["id"])
-            product.load_gog_min(product_data)
+            product.load_web_min(product_data)
             self.products.append(product)
 
         self.page = int(search_data["page"])
@@ -30,6 +30,10 @@ class SearchResult(GogObject):
         new_query = self.query.copy()
         new_query["page"] = self.page - 1
         return self.api.search(**new_query)
+
+    @property
+    def count(self):
+        return len(self.products)
 
     def __repr__(self):
         return self.simple_repr(
