@@ -64,7 +64,7 @@ def add_products_web(api, prod_list, json_data):
     if not json_data:
         return
     for prod_data in json_data:
-        product = api.get_product(prod_data["id"])
+        product = api.product(prod_data["id"])
         product.load_web_min(prod_data)
         prod_list.append(product)
 
@@ -72,7 +72,7 @@ def add_products_galaxy(api, prod_list, json_data):
     if not json_data:
         return
     for prod_data in json_data:
-        product = api.get_product(prod_data["id"])
+        product = api.product(prod_data["id"])
         product.load_galaxy(prod_data)
         prod_list.append(product)
 
@@ -168,7 +168,7 @@ class Product(GogObject):
 
         if data.get("dlcs", False):
             self.dlcs = [
-                self.api.get_product(dlc["id"])
+                self.api.product(dlc["id"])
                 for dlc in data["dlcs"]["products"]]
         else:
             self.dlcs = []

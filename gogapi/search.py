@@ -9,7 +9,7 @@ class SearchResult(GogObject):
     def load_search(self, search_data):
         self.products = []
         for product_data in search_data["products"]:
-            product = self.api.get_product(product_data["id"])
+            product = self.api.product(product_data["id"])
             product.load_web_min(product_data)
             self.products.append(product)
 

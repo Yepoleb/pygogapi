@@ -64,14 +64,14 @@ class GogApi:
         # Set headers
         # Prevent getting blocked by default
         headers = {"User-Agent": USER_AGENT}
+        # Add a token to the request if it exists
         if self.token is not None:
             if self.token.expired():
                 self.token.refresh()
             headers["Authorization"] = "Bearer " + self.token.access_token
         elif authorized:
             raise NotAuthorizedError()
-        else:
-            headers = {}
+
         headers.update(kwargs.pop("headers", {}))
 
         # Set cookies
@@ -455,7 +455,7 @@ class GogApi:
     def galaxy_client_config():
         return self.get_json(urls.galaxy("client-config"), authorized=False)
 
-    def get_product(self, product_id):
+    def product(self, product_id):
         return Product(self, product_id)
 
     def search(self, **query):
