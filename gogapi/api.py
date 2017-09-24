@@ -140,7 +140,7 @@ class GogApi:
                 gogdata.update(data)
         return gogdata
 
-    def set_locale(country, currency, locale):
+    def set_locale(self, country, currency, locale):
         """
         country: ISO 3166 Alpha-2
         currency: ISO 4217
