@@ -192,7 +192,7 @@ class RepositoryV2(GogObject):
         self.client_id = repo_data["clientId"]
         self.client_secret = repo_data["clientSecret"]
         self.cloud_saves = repo_data["cloudSaves"]
-        self.dependencies = repo_data["dependencies"]
+        self.dependencies = repo_data.get("dependencies", None)
         self.depots = [
             DepotV2(self.api, depot_data)
             for depot_data in repo_data["depots"]]
@@ -216,7 +216,7 @@ class RepositoryProductV2(GogObject):
     def load_product(self, product_data):
         self.name = product_data["name"]
         self.product_id = int(product_data["productId"])
-        self.script = product_data["script"]
+        self.script = product_data.get("script", None)
         self.temp_arguments = product_data["temp_arguments"]
         self.temp_executable = product_data["temp_executable"]
 
@@ -240,6 +240,7 @@ class DepotV2(GogObject):
         for depot_item in manifest_data["depot"]["items"]:
             if depot_item["type"] == "DepotFile":
                 self.files.append(DepotFileV2(self.api, depot_item))
+            # TODO: DepotDirectory, 1938069609 mac build
             else:
                 raise NotImplementedError(
                     "Unknown depot item type: {}".format(depot_item["type"]))

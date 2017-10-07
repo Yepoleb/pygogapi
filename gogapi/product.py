@@ -19,9 +19,9 @@ GOGDATA_TYPE = {
 
 
 def parse_systems(system_compat):
-    return [
+    return set(
         normalize_system(system)
-        for system, supported in system_compat.items() if supported]
+        for system, supported in system_compat.items() if supported)
 
 def parse_system_reqs(system_reqs):
     if not system_reqs:
@@ -178,7 +178,7 @@ class Product(GogObject):
         if "downloads" in data:
             self.installers = [Download(self.api, "installers", dl_data)
                 for dl_data in data["downloads"]["installers"]]
-            self.patches = [Download(self.api, "patchs", dl_data)
+            self.patches = [Download(self.api, "patches", dl_data)
                 for dl_data in data["downloads"]["patches"]]
             self.language_packs = [Download(self.api, "language_packs", dl_data)
                 for dl_data in data["downloads"]["language_packs"]]
@@ -318,6 +318,7 @@ class Product(GogObject):
 
     def get_builds(self, system):
         # TODO: return counts and has_private_branches
+        # TODO: normalize system
         data = self.api.galaxy_builds(self.id, system)
         return [Build(self.api, build_data) for build_data in data["items"]]
 
@@ -333,6 +334,10 @@ class Product(GogObject):
         return itertools.chain(
             self.installers, self.patches, self.language_packs,
             self.bonus_content)
+
+    @property
+    def forum_slug(self):
+        return self.link_forum.rsplit('/', 1)[1]
 
     def __repr__(self):
         return self.simple_repr(["id", "slug", "title", "type"])

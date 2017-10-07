@@ -14,7 +14,6 @@ class Download(GogObject):
     def load_galaxy(self, data):
         self.id = str(data["id"])
         self.name = data["name"]
-        self.total_size = data["total_size"]
         self.files = [File(self.api, file_data) for file_data in data["files"]]
 
         # installers
@@ -25,6 +24,10 @@ class Download(GogObject):
         # bonus_content
         self.bonus_type = data.get("type")
         self.count = data.get("count")
+
+    @property
+    def total_size(self):
+        return sum(f.size for f in self.files)
 
 
 class File(GogObject):
