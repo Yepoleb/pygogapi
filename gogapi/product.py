@@ -135,7 +135,7 @@ class Product(GogObject):
 
     def load_galaxy(self, data):
         logger.debug("Loading galaxy data for %s", self.id)
-        self.title = data["title"]
+        self.title_galaxy = data["title"]
         self.slug = data["slug"]
         self.content_systems = parse_systems(
             data["content_system_compatibility"])
@@ -241,7 +241,7 @@ class Product(GogObject):
         self.buyable = data["buyable"]
         self.publisher = data.get("publisher") # missing in series
         #self.sales_visibility IGNORED
-        self.title = data["title"]
+        self.title_web = data["title"]
         self.image_logo = data["image"]
         self.link_card = data["url"]
         self.is_price_visible = data["isPriceVisible"]
@@ -338,6 +338,10 @@ class Product(GogObject):
     @property
     def forum_slug(self):
         return self.link_forum.rsplit('/', 1)[1]
+
+    @property
+    def title(self):
+        return self.title_galaxy or self.title_web
 
     def __repr__(self):
         return self.simple_repr(["id", "slug", "title", "type"])
