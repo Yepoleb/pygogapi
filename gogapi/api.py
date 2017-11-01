@@ -98,6 +98,8 @@ class GogApi:
                 return resp
             elif 400 <= resp.status_code < 500:
                 break
+            else:
+                retries -= 1
 
         resp.raise_for_status()
 
