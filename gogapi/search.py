@@ -31,9 +31,29 @@ class SearchResult(GogObject):
         new_query["page"] = self.page - 1
         return self.api.search(**new_query)
 
+    def iter_pages(self):
+        page = self
+        yield page
+        while not page.last_page:
+            page = page.next_page()
+            yield page
+
+    def iter_products(self):
+        for page in self.iter_pages():
+            for product in page.products:
+                yield product
+
     @property
     def count(self):
         return len(self.products)
+
+    @property
+    def first_page(self):
+        return self.page == 1
+
+    @property
+    def last_page(self):
+        return self.page == self.total_pages
 
     def __repr__(self):
         return self.simple_repr(
