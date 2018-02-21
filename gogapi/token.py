@@ -20,6 +20,26 @@ def get_auth_url():
 
 
 class Token:
+    @classmethod
+    def from_file(cls, filename):
+        token = cls()
+        token.load(filename)
+        return token
+
+    @classmethod
+    def from_code(cls, login_code):
+        token_query = {
+            "client_id": CLIENT_ID,
+            "client_secret": CLIENT_SECRET,
+            "grant_type": "authorization_code",
+            "code": login_code,
+            "redirect_uri": REDIRECT_URL # Needed for origin verification
+        }
+        token_resp = requests.get(urls.galaxy("token"), params=token_query)
+        token = cls()
+        token.set_data(token_resp.json())
+        return token
+
     def set_data(self, token_data):
         if "error" in token_data:
             raise ApiError(token_data["error"], token_data["error_description"])
@@ -50,9 +70,6 @@ class Token:
         }
         return token_data
 
-    def __repr__(self):
-        return str(self.__dict__)
-
     def load(self, filename):
         with open(filename, "r") as f:
             self.set_data(json.load(f))
@@ -60,24 +77,6 @@ class Token:
     def save(self, filename):
         with open(filename, "w") as f:
             json.dump(self.get_data(), f, indent=2, sort_keys=True)
-
-    def from_file(filename):
-        token = Token()
-        token.load(filename)
-        return token
-
-    def from_code(login_code):
-        token_query = {
-            "client_id": CLIENT_ID,
-            "client_secret": CLIENT_SECRET,
-            "grant_type": "authorization_code",
-            "code": login_code,
-            "redirect_uri": REDIRECT_URL # Needed for origin verification
-        }
-        token_resp = requests.get(urls.galaxy("token"), params=token_query)
-        token = Token()
-        token.set_data(token_resp.json())
-        return token
 
     def refresh(self):
         token_query = {
@@ -92,3 +91,6 @@ class Token:
     def expired(self, margin=timedelta(seconds=60)):
         expires_at = self.created + self.expires_in
         return (datetime.now(timezone.utc) - expires_at) > margin
+
+    def __repr__(self):
+        return str(self.__dict__)

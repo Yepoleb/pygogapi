@@ -61,6 +61,10 @@ class GogApi:
 
     def request(self, method, url, authorized=True, allow_redirects=False,
                 **kwargs):
+        """
+        Wrapper around requests.request that also handles authorization,
+        retries and logging
+        """
         # Set headers
         # Prevent getting blocked by default
         headers = {"User-Agent": USER_AGENT}
@@ -104,12 +108,24 @@ class GogApi:
         resp.raise_for_status()
 
     def get(self, *args, **kwargs):
+        """
+        Wrapper around requests.get
+        """
         return self.request("GET", *args, **kwargs)
 
     def post(self, *args, **kwargs):
+        """
+        Wrapper around requests.post
+        """
         return self.request("POST", *args, **kwargs)
 
     def request_json(self, *args, compressed=False, **kwargs):
+        """
+        Wrapper around GogApi.request that automatically parses the
+        JSON response. Also does zlib decompression because GOG decided
+        to reinvent the wheel instead of using HTTP gzip encoding for
+        their content system V2.
+        """
         resp = self.request(*args, **kwargs)
         if not compressed:
             if DEBUG_JSON:
@@ -123,9 +139,16 @@ class GogApi:
             return json.loads(json_text)
 
     def get_json(self, *args, **kwargs):
+        """
+        Wrapper around GogApi.get with JSON parsing
+        """
         return self.request_json("GET", *args, **kwargs)
 
     def get_gogdata(self, url, *args, **kwargs):
+        """
+        Downloads a page and returns the embedded JavaScript gogData
+        variable.
+        """
         resp = self.get(url, *args, **kwargs)
         gogdata = {}
         for script in find_scripts(resp.text):
