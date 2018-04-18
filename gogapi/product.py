@@ -5,7 +5,7 @@ from decimal import Decimal
 
 import dateutil.parser
 
-from gogapi.contentsystem import Build
+from gogapi.contentsystem import Build, SecureLinkV2
 from gogapi.download import Download
 from gogapi.normalization import normalize_system
 from gogapi.base import GogObject, MissingResourceError, logger
@@ -321,6 +321,13 @@ class Product(GogObject):
         # TODO: normalize system
         data = self.api.galaxy_builds(self.id, system)
         return [Build(self.api, build_data) for build_data in data["items"]]
+
+    def get_secure_link(self, path, generation):
+        link_data = self.api.galaxy_secure_link(self.id, path, generation)
+        if generation == 1:
+            raise NotImplementedError("V1 not implemented")
+        elif generation == 2:
+            return SecureLinkV2(self.api, link_data)
 
     @property
     def required_product(self):

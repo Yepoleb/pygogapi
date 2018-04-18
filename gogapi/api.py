@@ -97,7 +97,8 @@ class GogApi:
         retries = REQUEST_RETRIES
         while retries > 0:
             resp = requests.request(
-                method, url, headers=headers, cookies=cookies, **kwargs)
+                method, url, headers=headers, cookies=cookies,
+                allow_redirects=allow_redirects, **kwargs)
             if resp.status_code < 400:
                 return resp
             elif 400 <= resp.status_code < 500:
@@ -467,6 +468,11 @@ class GogApi:
         return self.get_json(
             urls.galaxy("products"), params=params, authorized=False)
 
+    def galaxy_secure_link(self, game_id, path, generation):
+        return self.get_json(
+            urls.galaxy("cs.securelink", game_id),
+            params={"path": path, "generation": generation})
+
     def galaxy_builds(self, game_id, system):
         return self.get_json(
             urls.galaxy("cs.builds", game_id, system), authorized=False)
@@ -480,8 +486,8 @@ class GogApi:
     def galaxy_client_config():
         return self.get_json(urls.galaxy("client-config"), authorized=False)
 
-    def product(self, product_id):
-        return Product(self, product_id)
+    def product(self, product_id, slug=None):
+        return Product(self, product_id, slug)
 
     def search(self, **query):
         search_data = self.web_search(**query)

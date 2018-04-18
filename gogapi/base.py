@@ -27,6 +27,9 @@ class GogObject:
         self.api = api
         self.loaded = set()
 
+    def has(self, *attrs):
+        return all(hasattr(self, attr) for attr in attrs)
+
     def simple_repr(self, attributes):
         attr_pairs = []
         for name in attributes:

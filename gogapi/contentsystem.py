@@ -1,6 +1,7 @@
 from gogapi.normalization import normalize_system
 from gogapi.base import GogObject
 
+# TODO: repr for everything
 
 
 class Build(GogObject):
@@ -43,6 +44,12 @@ class Build(GogObject):
         else:
             raise NotImplementedError()
 
+    def __repr__(self):
+        return self.simple_repr([
+            "id", "product_id", "os", "branch", "version_name", "tags",
+            "public", "date_published", "generation", "link", "legacy_build_id"
+        ])
+
 
 ########################################
 # Generation 1
@@ -78,6 +85,10 @@ class RepositoryV1(GogObject):
         self.name = product_data["projectName"]
         assert repo_data["version"] == self.generation
 
+    def __repr__(self):
+        return self.simple_repr(
+            ["url", "name", "timestamp", "install_directory"])
+
 
 class RedistV1(GogObject):
     generation = 1
@@ -92,6 +103,9 @@ class RedistV1(GogObject):
         self.argument = redist_data["argument"]
         self.size = int(redist_data["size"])
 
+    def __repr__(self):
+        return self.simple_repr(["redist", "executable", "argument", "size"])
+
 
 class RepositoryProductV1(GogObject):
     generation = 1
@@ -105,6 +119,10 @@ class RepositoryProductV1(GogObject):
         self.product_id = int(product_data["gameID"])
         self.names = product_data["name"]
         self.standalone = product_data["standalone"]
+
+    def __repr__(self):
+        return self.simple_repr(
+            ["dependencies", "product_id", "names", "standalone"])
 
 
 class SupportCommandV1(GogObject):
@@ -189,9 +207,9 @@ class RepositoryV2(GogObject):
 
     def load_repo(self, repo_data):
         self.base_product_id = int(repo_data["baseProductId"])
-        self.client_id = repo_data["clientId"]
-        self.client_secret = repo_data["clientSecret"]
-        self.cloud_saves = repo_data["cloudSaves"]
+        self.client_id = repo_data.get("clientId")
+        self.client_secret = repo_data.get("clientSecret")
+        self.cloud_saves = repo_data.get("cloudSaves")
         self.dependencies = repo_data.get("dependencies", None)
         self.depots = [
             DepotV2(self.api, depot_data)
@@ -202,8 +220,14 @@ class RepositoryV2(GogObject):
         self.products = [
             RepositoryProductV2(self.api, product_data)
             for product_data in repo_data["products"]]
-        self.tags = repo_data["tags"]
+        self.tags = repo_data.get("tags")
         assert repo_data["version"] == self.generation
+
+    def __repr__(self):
+        return self.simple_repr([
+            "base_product_id", "client_id", "client_secret", "cloud_saves",
+            "dependencies", "install_directory", "platform", "tags"
+        ])
 
 
 class RepositoryProductV2(GogObject):
@@ -236,16 +260,18 @@ class DepotV2(GogObject):
         self.product_id = int(depot_data["productId"])
 
     def load_manifest(self, manifest_data):
-        self.files = []
+        self.items = []
         for depot_item in manifest_data["depot"]["items"]:
             if depot_item["type"] == "DepotFile":
-                self.files.append(DepotFileV2(self.api, depot_item))
-            # TODO: DepotDirectory, 1938069609 mac build
+                self.items.append(DepotFileV2(self.api, depot_item))
+            elif depot_item["type"] == "DepotDirectory":
+                self.items.append(DepotDirectoryV2(self.api, depot_item))
             else:
                 raise NotImplementedError(
                     "Unknown depot item type: {}".format(depot_item["type"]))
-        self.small_files_container = DepotFileV2(
-            self.api, manifest_data["depot"]["smallFilesContainer"])
+        if "smallFilesContainer" in manifest_data["depot"]:
+            self.small_files_container = DepotFileV2(
+                self.api, manifest_data["depot"]["smallFilesContainer"])
         assert manifest_data["version"] == self.generation
 
         self.loaded.add("manifest")
@@ -254,9 +280,15 @@ class DepotV2(GogObject):
         manifest_data = self.api.galaxy_cs_meta(self.manifest_id)
         self.load_manifest(manifest_data)
 
+    def __repr__(self):
+        return self.simple_repr([
+            "manifest_id", "product_id", "language", "size", "compressed_size"
+        ])
+
 
 class DepotFileV2(GogObject):
     generation = 2
+    type = "DepotFile"
 
     def __init__(self, api, file_data):
         super().__init__(api)
@@ -284,6 +316,9 @@ class DepotFileV2(GogObject):
     def size(self):
         return sum(chunk.size for chunk in self.chunks)
 
+    def __repr__(self):
+        return self.simple_repr(["path"])
+
 
 class DepotChunkV2(GogObject):
     generation = 2
@@ -297,3 +332,50 @@ class DepotChunkV2(GogObject):
         self.compressed_size = chunk_data["compressedSize"]
         self.md5 = chunk_data["md5"]
         self.size = chunk_data["size"]
+
+    def __repr__(self):
+        return self.simple_repr(
+            ["compressed_md5", "compressed_size", "md5", "size"])
+
+
+class DepotDirectoryV2(GogObject):
+    generation = 2
+    type = "DepotDirectory"
+
+    def __init__(self, api, directory_data):
+        super().__init__(api)
+        self.load_directory(directory_data)
+
+    def load_directory(self, directory_data):
+        self.path = directory_data["path"]
+
+    def __repr__(self):
+        return self.simple_repr(["path"])
+
+
+class SecureLinkV2(GogObject):
+    generation = 2
+
+    def __init__(self, api, link_data):
+        super().__init__(api)
+        self.load_link(link_data)
+
+    def load_link(self, link_data):
+        self.prod_id = link_data["product_id"]
+        self.type = link_data["type"]
+        self.full_url = link_data["url"]["url"]
+        self.base_url = link_data["url"]["base_url"]
+        self.path = link_data["url"]["path"]
+        self.token = link_data["url"]["token"]
+
+    def link_for(self, checksum):
+        return "/".join((
+            self.base_url, self.path, checksum[0:2], checksum[2:4], checksum
+        )) + "?" + self.token
+
+    def link_for_chunk(self, chunk):
+        return self.link_for(chunk.compressed_md5)
+
+    def __repr__(self):
+        return self.simple_repr(
+            ["prod_id", "type", "base_url", "path", "token"])
