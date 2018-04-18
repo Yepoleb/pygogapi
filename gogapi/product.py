@@ -2,6 +2,7 @@ from datetime import datetime
 import itertools
 import string
 from decimal import Decimal
+import re
 
 import dateutil.parser
 
@@ -15,6 +16,8 @@ GOGDATA_TYPE = {
     2: "pack",
     3: "dlc"
 }
+
+YOUTUBE_EMBED_RE = re.compile("youtube.com/embed/([\w\-_]+)")
 
 
 
@@ -198,11 +201,13 @@ class Product(GogObject):
             self.loaded.add("description")
 
         if "screenshots" in data:
-            self.screenshots = data["screenshots"]
+            self.screenshots = [screenshot_data["image_id"]
+                for screenshot_data in data["screenshots"]]
             self.loaded.add("screenshots")
 
         if "videos" in data:
-            self.videos = data["videos"]
+            self.videos = [Video(self.api, video_data)
+                for video_data in data["videos"]]
             self.loaded.add("videos")
 
         if "related_products" in data:
@@ -447,3 +452,21 @@ class Language(GogObject):
 
     def __repr__(self):
         return self.simple_repr(["name", "isocode"])
+
+class Video(GogObject):
+    def __init__(self, api, data):
+        super().__init__(api)
+        self.load_video(data)
+
+    def load_video(self, data):
+        self.video_url = data["video_url"]
+        self.thumbnail_url = data["thumbnail_url"]
+        self.provider = data["provider"]
+
+    @property
+    def video_id(self):
+        if self.provider != "youtube":
+            raise NotImplementedError(
+                "Providers other than youtube are not implemented")
+        else:
+            return YOUTUBE_EMBED_RE.search(self.video_url).group(1)
