@@ -8,7 +8,7 @@ import dateutil.parser
 
 from gogapi.contentsystem import Build, SecureLinkV2
 from gogapi.download import Download
-from gogapi.normalization import normalize_system
+from gogapi.normalization import normalize_system, normalize_language
 from gogapi.base import GogObject, MissingResourceError, logger
 
 GOGDATA_TYPE = {
@@ -145,8 +145,8 @@ class Product(GogObject):
 
         if data["languages"]:
             self.languages = [
-                Language(self.api, name, isocode) for
-                isocode, name in data["languages"].items()]
+                Language(self.api, name, normalize_language(isocode))
+                for isocode, name in data["languages"].items()]
         else:
             self.languages = []
         self.in_development = data["in_development"]["active"]
@@ -323,9 +323,13 @@ class Product(GogObject):
 
     def get_builds(self, system):
         # TODO: return counts and has_private_branches
-        # TODO: normalize system
+        if system == "mac":
+            system = "osx"
+
         data = self.api.galaxy_builds(self.id, system)
-        return [Build(self.api, build_data) for build_data in data["items"]]
+        builds_dirty = [Build(self.api, build_data) for build_data in data["items"]]
+        builds_dedup = {build.id: build for build in builds_dirty}
+        return list(builds_dedup.values())
 
     def get_secure_link(self, path, generation):
         link_data = self.api.galaxy_secure_link(self.id, path, generation)

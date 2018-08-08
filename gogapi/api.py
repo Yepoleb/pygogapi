@@ -23,7 +23,7 @@ PRODUCT_EXPANDABLE = [
     "related_products", "changelog"
 ]
 USER_EXPANDABLE = ["friendStatus", "wishlistStatus", "blockedStatus"]
-LOCALE_CODES = ["de-DE", "en-US", "fr-FR", "pt-BR", "ru-RU", "zh-Hans"]
+LOCALE_CODES = ["de-DE", "en-US", "fr-FR", "pt-BR", "pl-PL", "ru-RU", "zh-Hans"]
 CURRENCY_CODES = [
     "USD", "EUR", "GBP", "AUD", "RUB", "PLN", "CAD", "CHF", "NOK", "SEK", "DKK"
 ]
@@ -56,6 +56,9 @@ class GogApi:
     def __init__(self, token=None):
         self.token = token
         self.locale = (None, None, None) # TODO: replace tuple
+        self.session = requests.Session()
+        self.session.headers["User-Agent"] = USER_AGENT
+        self.force_authorize = False
 
     # Helpers
 
@@ -65,40 +68,22 @@ class GogApi:
         Wrapper around requests.request that also handles authorization,
         retries and logging
         """
-        # Set headers
-        # Prevent getting blocked by default
-        headers = {"User-Agent": USER_AGENT}
-        # Add a token to the request if it exists
-        if self.token is not None:
+
+        if authorized or self.force_authorize:
+            if self.token is None:
+                raise NotAuthorizedError()
             if self.token.expired():
                 self.token.refresh()
-            headers["Authorization"] = "Bearer " + self.token.access_token
-        elif authorized:
-            raise NotAuthorizedError()
-
-        headers.update(kwargs.pop("headers", {}))
-
-        # Set cookies
-        cookies = {}
-        if all(self.locale):
-            cookies["gog_lc"] = "_".join(self.locale)
-        cookies.update(kwargs.pop("cookies", {}))
-
-        # Log request
-        if "params" in kwargs:
-            full_url = url + "?" + "&".join(
-                str(key) + "=" + str(value)
-                for key, value in kwargs["params"].items())
-            logger.debug("%s %s", method, full_url)
+            self.session.headers["Authorization"] = \
+                "Bearer " + self.token.access_token
         else:
-            logger.debug("%s %s", method, url)
+            self.session.headers.pop("Authorization", None)
 
         # Retries
         retries = REQUEST_RETRIES
         while retries > 0:
-            resp = requests.request(
-                method, url, headers=headers, cookies=cookies,
-                allow_redirects=allow_redirects, **kwargs)
+            resp = self.session.request(
+                method, url, allow_redirects=allow_redirects, **kwargs)
             if resp.status_code < 400:
                 return resp
             elif 400 <= resp.status_code < 500:
@@ -130,13 +115,13 @@ class GogApi:
         resp = self.request(*args, **kwargs)
         if not compressed:
             if DEBUG_JSON:
-                logger.debug(resp.text)
+                print(resp.text)
             return resp.json()
         else:
             json_comp = resp.content
             json_text = zlib.decompress(json_comp, 15).decode("utf-8")
             if DEBUG_JSON:
-                logger.debug(json_text)
+                print(json_text)
             return json.loads(json_text)
 
     def get_json(self, *args, **kwargs):
@@ -178,8 +163,10 @@ class GogApi:
             return AttributeError("Invalid currency code {}".format(locale))
         elif locale not in LOCALE_CODES:
             return AttributeError("Invalid locale code {}".format(locale))
-        else:
-            self.locale = (country, currency, locale)
+
+        self.locale = (country, currency, locale)
+        self.session.cookies["gog_lc"] = "_".join(self.locale)
+
 
     # Web APIs
 

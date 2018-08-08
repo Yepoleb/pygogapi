@@ -1,18 +1,22 @@
-from gogapi.normalization import normalize_system
+import re
+
+from gogapi.normalization import normalize_system, normalize_language
 from gogapi.base import GogObject
 
 # TODO: repr for everything
+
+META_ID_RE = re.compile(r"v2/meta/.{2}/.{2}/(\w+)")
 
 
 class Build(GogObject):
     def __init__(self, api, build_data):
         super().__init__(api)
-        self.id = build_data["build_id"]
+        self.id = int(build_data["build_id"])
         self.product_id = int(build_data["product_id"])
         self.os = normalize_system(build_data["os"])
         self.branch = build_data["branch"]
-        self.version_name = build_data["version_name"]
-        self.tags = build_data["tags"]
+        self.version_name = build_data["version_name"] or None
+        self.tags = set(build_data["tags"])
         self.public = build_data["public"]
         self.date_published = build_data["date_published"]
         self.generation = build_data["generation"]
@@ -44,6 +48,14 @@ class Build(GogObject):
         else:
             raise NotImplementedError()
 
+    @property
+    def meta_id(self):
+        match = META_ID_RE.search(self.link)
+        if match is not None:
+            return match.group(1)
+        else:
+            return None
+
     def __repr__(self):
         return self.simple_repr([
             "id", "product_id", "os", "branch", "version_name", "tags",
@@ -65,7 +77,7 @@ class RepositoryV1(GogObject):
 
     def load_repo(self, repo_data):
         product_data = repo_data["product"]
-        # TODO: figure out what this is (doesn't look like a unix timestamp)
+        # Seconds since 2014-02-28 23:00:00
         self.timestamp = product_data["timestamp"]
         self.depots = []
         self.redists = []
@@ -76,9 +88,9 @@ class RepositoryV1(GogObject):
                 self.redists.append(RedistV1(self.api, depot_data))
         self.support_commands = [
             SupportCommandV1(self.api, command_data)
-            for command_data in product_data["support_commands"]]
+            for command_data in product_data.get("support_commands", [])]
         self.install_directory = product_data["installDirectory"]
-        self.root_game_id = product_data["rootGameID"]
+        self.root_game_id = int(product_data["rootGameID"])
         self.game_ids = [
             RepositoryProductV1(self.api, product_data)
             for product_data in product_data["gameIDs"]]
@@ -99,9 +111,8 @@ class RedistV1(GogObject):
 
     def load_galaxy(self, redist_data):
         self.redist = redist_data["redist"]
-        self.executable = redist_data["executable"]
-        self.argument = redist_data["argument"]
-        self.size = int(redist_data["size"])
+        self.executable = redist_data.get("executable")
+        self.argument = redist_data.get("argument")
 
     def __repr__(self):
         return self.simple_repr(["redist", "executable", "argument", "size"])
@@ -115,10 +126,12 @@ class RepositoryProductV1(GogObject):
         self.load_product(product_data)
 
     def load_product(self, product_data):
-        self.dependencies = product_data["dependencies"] # TODO: investigate
+        if product_data.get("dependencies"):
+            self.dependency = int(product_data["dependencies"][0])
+        else:
+            self.dependency = None
         self.product_id = int(product_data["gameID"])
-        self.names = product_data["name"]
-        self.standalone = product_data["standalone"]
+        self.name = next(iter(product_data["name"].values()))
 
     def __repr__(self):
         return self.simple_repr(
@@ -133,12 +146,16 @@ class SupportCommandV1(GogObject):
         self.load_command(command_data)
 
     def load_command(self, command_data):
-        self.languages = command_data["languages"] # TODO: normalize
+        if command_data["languages"]:
+            self.language = normalize_language(command_data["languages"][0])
+        else:
+            self.language = None
         self.executable = command_data["executable"]
         self.product_id = int(command_data["gameID"])
-        self.systems = [
-            normalize_system(system) for system in command_data["systems"]]
-        self.argument = command_data["argument"]
+        if command_data["systems"]:
+            self.system = normalize_system(command_data["systems"][0])
+        else:
+            self.system = None
 
 class DepotV1(GogObject):
     generation = 1
@@ -149,25 +166,19 @@ class DepotV1(GogObject):
         self.load_depot(depot_data)
 
     def load_depot(self, depot_data):
-        self.languages = depot_data["languages"] # TODO: normalize
-        self.size = int(depot_data["size"])
+        self.languages = [
+            normalize_language(lang) for lang in depot_data["languages"]]
+        if "size" in depot_data:
+            self.size = int(depot_data["size"])
+        else:
+            self.size = None
         self.game_ids = [int(game_id) for game_id in depot_data["gameIDs"]]
-        self.systems = [
-            normalize_system(system) for system in depot_data["systems"]]
+        if depot_data["systems"]:
+            self.system = normalize_system(depot_data["systems"][0])
+        else:
+            self.system = None
         self.manifest_name = depot_data["manifest"]
-
-    def load_manifest(self, manifest_data):
-        self.name = manifest_data["depot"]["name"]
-        self.files = [
-            DepotFileV1(self.api, file_data)
-            for file_data in manifest_data["depot"]["files"]]
-        assert manifest_data["version"] == self.generation
-
-        self.loaded.add("manifest")
-
-    def update_manifest(self):
-        manifest_data = self.api.get_json(self.manifest_url)
-        self.load_manifest(manifest_data)
+        self.manifest = DepotManifestV1(self.api, self.manifest_url)
 
     @property
     def manifest_id(self):
@@ -179,6 +190,40 @@ class DepotV1(GogObject):
         # Remove file part from url and replace it with the manifest
         return self.url[:self.url.rfind('/') + 1] + self.manifest_name
 
+
+class DepotManifestV1(GogObject):
+    generation = 1
+
+    def __init__(self, api, url):
+        super().__init__(api)
+        self.url = url
+
+    def load_manifest(self, data):
+        self.name = data["depot"]["name"]
+        self.files = []
+        self.dirs = []
+        self.links = []
+        for item in data["depot"]["files"]:
+            if item.get("symlinkType"):
+                self.links.append(DepotLinkV1(self.api, item))
+            elif item.get("directory"):
+                self.dirs.append(DepotDirectoryV1(self.api, item))
+            else:
+                self.files.append(DepotFileV1(self.api, item))
+
+        assert data["version"] == self.generation
+        self.loaded.add("manifest")
+
+    def update_manifest(self):
+        manifest_data = self.api.get_json(self.url)
+        self.load_manifest(manifest_data)
+
+    @property
+    def manifest_id(self):
+        assert self.url.endswith(".json")
+        return self.url[self.url.rfind("/") + 1:-len(".json")]
+
+
 class DepotFileV1(GogObject):
     generation = 1
 
@@ -187,12 +232,41 @@ class DepotFileV1(GogObject):
         self.load_galaxy(file_data)
 
     def load_galaxy(self, file_data):
-        self.url = file_data["url"]
-        self.size = file_data["size"]
-        self.checksum = file_data["hash"]
-        self.path = file_data["path"]
-        self.offset = file_data["offset"]
+        self.path = file_data["path"] # string
+        self.size = file_data.get("size") # int
+        self.checksum = file_data.get("hash") # string
+        self.url = file_data.get("url") # string
+        self.offset = file_data.get("offset") # int
 
+        self.flags = []
+        for flagname in ["executable", "hidden", "support"]:
+            if file_data.get(flagname, False):
+                self.flags.append(flagname)
+
+class DepotDirectoryV1(GogObject):
+    generation = 1
+
+    def __init__(self, api, data):
+        super().__init__(api)
+        self.load_galaxy(data)
+
+    def load_galaxy(self, data):
+        self.path = data["path"]
+        self.flags = []
+        if data.get("support", False):
+            self.flags.append("support")
+
+class DepotLinkV1(GogObject):
+    generation = 1
+
+    def __init__(self, api, data):
+        super().__init__(api)
+        self.load_galaxy(data)
+
+    def load_galaxy(self, data):
+        self.path = data["path"]
+        self.target = data["target"]
+        self.type = data["symlinkType"]
 
 ########################################
 # Generation 2
@@ -209,18 +283,21 @@ class RepositoryV2(GogObject):
         self.base_product_id = int(repo_data["baseProductId"])
         self.client_id = repo_data.get("clientId")
         self.client_secret = repo_data.get("clientSecret")
-        self.cloud_saves = repo_data.get("cloudSaves")
-        self.dependencies = repo_data.get("dependencies", None)
+        self.cloudsaves = [
+            CloudSaveV2(self.api, cloudsave_data)
+            for cloudsave_data in repo_data.get("cloudSaves", [])]
+        self.dependencies = repo_data.get("dependencies", [])
         self.depots = [
             DepotV2(self.api, depot_data)
             for depot_data in repo_data["depots"]]
+        self.depots.append(
+            DepotV2(self.api, repo_data["offlineDepot"], is_offline=True))
         self.install_directory = repo_data["installDirectory"]
-        self.offline_depot = DepotV2(self.api, repo_data["offlineDepot"])
         self.platform = normalize_system(repo_data["platform"])
         self.products = [
             RepositoryProductV2(self.api, product_data)
             for product_data in repo_data["products"]]
-        self.tags = repo_data.get("tags")
+        self.tags = set(repo_data.get("tags", []))
         assert repo_data["version"] == self.generation
 
     def __repr__(self):
@@ -228,6 +305,18 @@ class RepositoryV2(GogObject):
             "base_product_id", "client_id", "client_secret", "cloud_saves",
             "dependencies", "install_directory", "platform", "tags"
         ])
+
+
+class CloudSaveV2(GogObject):
+    generation = 2
+
+    def __init__(self, api, data):
+        super().__init__(api)
+        self.load_cloudsave(data)
+
+    def load_cloudsave(self, data):
+        self.location = data["location"]
+        self.name = data["name"]
 
 
 class RepositoryProductV2(GogObject):
@@ -248,24 +337,46 @@ class RepositoryProductV2(GogObject):
 class DepotV2(GogObject):
     generation = 2
 
-    def __init__(self, api, depot_data):
+    def __init__(self, api, depot_data, is_offline=False):
         super().__init__(api)
         self.load_depot(depot_data)
+        self.is_offline = is_offline
 
     def load_depot(self, depot_data):
-        self.compressed_size = depot_data["compressedSize"]
+        self.compressed_size = depot_data.get("compressedSize", 0)
         self.size = depot_data["size"]
-        self.languages = depot_data["languages"]
+        self.languages = [
+            normalize_language(lang) for lang in depot_data["languages"]]
         self.manifest_id = depot_data["manifest"]
         self.product_id = int(depot_data["productId"])
+        self.is_gog_depot = depot_data.get("isGogDepot", False)
+        self.os_bitness = depot_data.get("osBitness")
+        self.manifest = DepotManifestV2(self.api, self.manifest_id)
+
+    def __repr__(self):
+        return self.simple_repr([
+            "manifest_id", "product_id", "language", "size", "compressed_size"
+        ])
+
+
+class DepotManifestV2(GogObject):
+    generation = 2
+
+    def __init__(self, api, manifest_id):
+        super().__init__(api)
+        self.manifest_id = manifest_id
 
     def load_manifest(self, manifest_data):
-        self.items = []
+        self.files = []
+        self.directories = []
+        self.links = []
         for depot_item in manifest_data["depot"]["items"]:
             if depot_item["type"] == "DepotFile":
-                self.items.append(DepotFileV2(self.api, depot_item))
+                self.files.append(DepotFileV2(self.api, depot_item))
             elif depot_item["type"] == "DepotDirectory":
-                self.items.append(DepotDirectoryV2(self.api, depot_item))
+                self.directories.append(DepotDirectoryV2(self.api, depot_item))
+            elif depot_item["type"] == "DepotLink":
+                self.links.append(DepotLinkV2(self.api, depot_item))
             else:
                 raise NotImplementedError(
                     "Unknown depot item type: {}".format(depot_item["type"]))
@@ -279,11 +390,6 @@ class DepotV2(GogObject):
     def update_manifest(self):
         manifest_data = self.api.galaxy_cs_meta(self.manifest_id)
         self.load_manifest(manifest_data)
-
-    def __repr__(self):
-        return self.simple_repr([
-            "manifest_id", "product_id", "language", "size", "compressed_size"
-        ])
 
 
 class DepotFileV2(GogObject):
@@ -351,6 +457,19 @@ class DepotDirectoryV2(GogObject):
 
     def __repr__(self):
         return self.simple_repr(["path"])
+
+
+class DepotLinkV2(GogObject):
+    generation = 2
+    type = "DepotLink"
+
+    def __init__(self, api, data):
+        super().__init__(api)
+        self.load_link(data)
+
+    def load_link(self, data):
+        self.path = data["path"]
+        self.target = data["target"]
 
 
 class SecureLinkV2(GogObject):

@@ -1,7 +1,7 @@
 import webbrowser
 import re
 
-from gogapi.token import Token, get_auth_url
+from gogapi import Token, get_auth_url
 
 
 LOGIN_INSTRUCTIONS = """\
