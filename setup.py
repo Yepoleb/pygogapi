@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name="gogapi",
-    version="0.1",
+    version="0.2",
     packages=["gogapi"],
     install_requires=[
         "requests",
